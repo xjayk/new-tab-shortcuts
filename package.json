@@ -1,0 +1,6 @@
+{
+  "name": "new-tab-shortcuts",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Zero-dependency Chrome New Tab override with shortcut management and groups"
+}

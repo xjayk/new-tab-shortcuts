@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>New Tab</title>
+  <!--
+    Critical CSS is inlined here to guarantee zero render-blocking:
+    the page paints with layout and skeleton styles before any
+    external resource is fetched.
+  -->
+  <style>
+    /* === Reset & base === */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 16px; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+                   Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* === Design tokens === */
+    :root {
+      --bg:          #0f1117;
+      --surface:     #1a1d27;
+      --surface-2:   #21253a;
+      --border:      #2e3348;
+      --text:        #e2e4ef;
+      --text-muted:  #7c85a8;
+      --accent:      #4f6ef7;
+      --accent-hover:#6b87ff;
+      --danger:      #e05a6a;
+      --radius:      10px;
+      --radius-sm:   6px;
+      --shadow:      0 4px 24px rgba(0,0,0,.35);
+    }
+
+    /* === Skeleton (visible before JS runs) === */
+    .skeleton-wrap { padding: 2.5rem 3rem; }
+    .skeleton-group { margin-bottom: 2.5rem; }
+    .skeleton-label {
+      width: 120px; height: 14px;
+      background: var(--surface-2);
+      border-radius: 4px;
+      margin-bottom: 1rem;
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    .skeleton-tiles { display: flex; gap: .75rem; }
+    .skeleton-tile {
+      width: 96px; height: 88px;
+      background: var(--surface);
+      border-radius: var(--radius);
+      animation: pulse 1.4s ease-in-out infinite;
+    }
+    .skeleton-tile:nth-child(2) { animation-delay: .1s; }
+    .skeleton-tile:nth-child(3) { animation-delay: .2s; }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .4; }
+    }
+  </style>
+  <link rel="stylesheet" href="newtab.css" />
+</head>
+<body>
+
+  <!-- Toolbar -->
+  <nav class="toolbar">
+    <span class="toolbar-brand">New Tab</span>
+    <button class="btn btn-sm" id="add-group-btn">+ New group</button>
+  </nav>
+
+  <!-- Main content -->
+  <main class="main">
+    <div id="app">
+      <!-- Inline skeleton rendered before JS so the page is never blank -->
+      <div class="skeleton-wrap">
+        <div class="skeleton-group">
+          <div class="skeleton-label"></div>
+          <div class="skeleton-tiles">
+            <div class="skeleton-tile"></div>
+            <div class="skeleton-tile"></div>
+            <div class="skeleton-tile"></div>
+          </div>
+        </div>
+        <div class="skeleton-group">
+          <div class="skeleton-label"></div>
+          <div class="skeleton-tiles">
+            <div class="skeleton-tile"></div>
+            <div class="skeleton-tile"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Deferred, non-blocking script -->
+  <script type="module" src="newtab.js"></script>
+</body>
+</html>

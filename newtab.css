@@ -1,0 +1,363 @@
+/* ============================================================
+   newtab.css — Full stylesheet for the New Tab extension
+   Design tokens are declared in the <style> block in newtab.html
+   so they are available before this file loads.
+   ============================================================ */
+
+/* === Layout === */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .75rem 2rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.toolbar-brand {
+  font-size: .8rem;
+  font-weight: 600;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.main {
+  flex: 1;
+  padding: 2.5rem 3rem;
+  max-width: 1400px;
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* === Buttons === */
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  gap: .4rem;
+  padding: .5rem 1rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  font-size: .875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background .15s, transform .1s;
+  outline: none;
+}
+.btn:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.btn:active { transform: scale(.97); }
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+}
+.btn-primary:hover { background: var(--accent-hover); }
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+}
+.btn-ghost:hover { background: var(--surface-2); color: var(--text); }
+
+.btn-sm {
+  padding: .35rem .75rem;
+  font-size: .8rem;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+}
+.btn-sm:hover { background: var(--border); }
+
+.icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: .9rem;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+  outline: none;
+}
+.icon-btn:hover { background: var(--surface-2); color: var(--text); }
+.icon-btn.danger:hover { background: rgba(224,90,106,.15); color: var(--danger); }
+.icon-btn:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+
+/* === Groups === */
+
+.group {
+  margin-bottom: 2.5rem;
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: .85rem;
+  gap: .5rem;
+}
+
+.group-name {
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: .2rem .4rem;
+  border-radius: var(--radius-sm);
+  transition: color .15s, background .15s;
+  user-select: none;
+}
+.group-name:hover { color: var(--text); background: var(--surface-2); }
+
+.group-actions {
+  display: flex;
+  align-items: center;
+  gap: .25rem;
+  opacity: 0;
+  transition: opacity .15s;
+}
+.group:hover .group-actions { opacity: 1; }
+
+.rename-input {
+  font-size: .78rem;
+  font-weight: 700;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  padding: .2rem .4rem;
+  outline: none;
+  max-width: 220px;
+}
+
+/* === Tiles === */
+
+.tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .65rem;
+}
+
+.tile {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: .5rem;
+  width: 96px;
+  min-height: 88px;
+  padding: .75rem .5rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  text-decoration: none;
+  color: var(--text);
+  cursor: pointer;
+  transition: background .15s, border-color .15s, transform .12s, box-shadow .15s;
+  overflow: hidden;
+}
+.tile:hover {
+  background: var(--surface-2);
+  border-color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow);
+}
+.tile:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.tile-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #fff;
+  flex-shrink: 0;
+}
+
+.tile-name {
+  font-size: .72rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-align: center;
+  max-width: 80px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  line-height: 1.2;
+}
+.tile:hover .tile-name { color: var(--text); }
+
+/* Delete button — appears on hover */
+.tile-delete {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  font-size: .65rem;
+  opacity: 0;
+  transition: opacity .15s, background .15s, color .15s;
+  z-index: 1;
+}
+.tile:hover .tile-delete { opacity: 1; }
+
+/* Add-shortcut tile */
+.tile-add {
+  border-style: dashed;
+  border-color: var(--border);
+  color: var(--text-muted);
+  background: transparent;
+  font-size: inherit;
+}
+.tile-add:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(79,110,247,.07);
+  transform: translateY(-2px);
+}
+
+.tile-add-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+  font-weight: 300;
+}
+
+/* === Empty state === */
+
+.empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+  gap: .75rem;
+  text-align: center;
+}
+
+.empty-title {
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.empty-sub {
+  font-size: .95rem;
+  color: var(--text-muted);
+  margin-bottom: .5rem;
+}
+
+/* === Modal === */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  animation: fade-in .15s ease;
+}
+
+.modal-overlay.modal-closing {
+  animation: fade-out .15s ease forwards;
+}
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.75rem 2rem;
+  width: 100%;
+  max-width: 380px;
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+  gap: .6rem;
+  animation: slide-up .2s ease;
+}
+
+.modal-overlay.modal-closing .modal {
+  animation: slide-down .15s ease forwards;
+}
+
+.modal-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: .25rem;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: .5rem;
+  margin-top: .5rem;
+}
+
+.field-label {
+  font-size: .78rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  letter-spacing: .04em;
+  text-transform: uppercase;
+}
+
+.field-input {
+  width: 100%;
+  padding: .55rem .75rem;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: .9rem;
+  outline: none;
+  transition: border-color .15s;
+}
+.field-input:focus { border-color: var(--accent); }
+.field-input::placeholder { color: var(--text-muted); }
+
+.field-error {
+  font-size: .8rem;
+  color: var(--danger);
+  min-height: 1.1em;
+}
+
+/* === Animations === */
+
+@keyframes fade-in  { from { opacity: 0; } to { opacity: 1; } }
+@keyframes fade-out { from { opacity: 1; } to { opacity: 0; } }
+@keyframes slide-up   { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@keyframes slide-down { from { opacity: 1; transform: none; } to { opacity: 0; transform: translateY(8px); } }
+
+/* === Scrollbar === */
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+/* === Focus ring (keyboard nav) === */
+
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
