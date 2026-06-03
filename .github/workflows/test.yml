@@ -1,0 +1,115 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - trunk
+    paths-ignore:
+      - '**/*.md'
+      - '*.html'
+      - '.gitignore'
+      - '.gitattributes'
+
+  # Run on non-draft PRs only.
+  # - opened / synchronize / reopened: standard PR lifecycle events
+  # - ready_for_review: fires when a draft is converted to ready — this
+  #   ensures CI triggers the moment a PR leaves draft state.
+  pull_request:
+    branches: ['**']
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - '**/*.md'
+      - '*.html'
+      - '.gitignore'
+      - '.gitattributes'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Job 1: ESLint
+  # ---------------------------------------------------------------------------
+  lint:
+    name: ESLint
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false || github.event_name == 'push'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run ESLint
+        run: npm run lint
+
+  # ---------------------------------------------------------------------------
+  # Job 2: Vitest unit tests
+  # ---------------------------------------------------------------------------
+  unit-tests:
+    name: Unit Tests (Vitest)
+    runs-on: ubuntu-latest
+    if: github.event.pull_request.draft == false || github.event_name == 'push'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run unit tests
+        run: npm test
+
+  # ---------------------------------------------------------------------------
+  # Job 3: Playwright integration tests (Chrome Extension)
+  #
+  # Extensions require headed Chromium — --headless=new has inconsistent
+  # extension/SW support on Linux CI runners. Instead we use xvfb-run to
+  # provide a virtual X display so headed Chromium can launch without a
+  # physical monitor.
+  #
+  # xvfb-run args:
+  #   -a  auto-select an available display number (avoids conflicts)
+  #   -s "-screen 0 1280x720x24"  set a real resolution/depth so Chrome
+  #      does not fall back to a software renderer
+  # ---------------------------------------------------------------------------
+  integration-tests:
+    name: Integration Tests (Playwright)
+    runs-on: ubuntu-latest
+    needs: [lint, unit-tests]
+    if: github.event.pull_request.draft == false || github.event_name == 'push'
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Install Xvfb
+        run: sudo apt-get install -y xvfb
+
+      - name: Run integration tests
+        run: xvfb-run -a -s "-screen 0 1280x720x24" npm run test:integration

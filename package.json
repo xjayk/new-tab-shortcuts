@@ -2,5 +2,22 @@
   "name": "new-tab-shortcuts",
   "version": "0.1.0",
   "private": true,
-  "description": "Zero-dependency Chrome New Tab override with shortcut management and groups"
+  "type": "module",
+  "description": "Zero-dependency Chrome New Tab override with shortcut management and groups",
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "test:integration": "playwright test",
+    "test:integration:headed": "playwright test --headed"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "@playwright/test": "^1.44.0",
+    "eslint": "^9.0.0",
+    "globals": "^15.0.0",
+    "vitest": "^4.1.8"
+  }
 }
