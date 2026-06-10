@@ -74,15 +74,16 @@
 }
 .btn-sm:hover { background: var(--border); }
 
-/* === Edit toggle button — ghost when inactive, filled accent when active === */
+/* Edit button: outlined ghost in view mode, filled accent in edit mode */
 #edit-btn {
   background: transparent;
   color: var(--text-muted);
-  border: 1px solid var(--border);
+  border: 1.5px solid var(--border);
 }
 #edit-btn:hover {
   background: var(--surface-2);
   color: var(--text);
+  border-color: var(--text-muted);
 }
 #edit-btn.active {
   background: var(--accent);
@@ -194,8 +195,8 @@
   text-decoration: none;
   color: var(--text);
   cursor: pointer;
-  /* overflow:hidden removed — it was clipping the .tile-dropdown out of the tile bounds.
-     Text overflow is handled individually on .tile-name below. */
+  /* overflow:hidden removed — it was clipping .tile-dropdown out of the tile bounds.
+     Text truncation is now scoped to .tile-name directly. */
   transition: background .15s, border-color .15s, transform .12s, box-shadow .15s;
 }
 .tile:hover {
@@ -245,20 +246,21 @@
   color: var(--text-muted);
   text-align: center;
   width: 80px;
+  max-width: 80px;
   white-space: nowrap;
-  overflow: hidden;        /* overflow:hidden scoped here to preserve ellipsis */
+  overflow: hidden;        /* scoped here instead of on .tile */
   text-overflow: ellipsis;
   line-height: 1.2;
 }
 .tile:hover .tile-name { color: var(--text); }
 
 /* Three-dot menu — appears on hover in edit mode.
-   overflow:visible ensures the dropdown is not clipped by any ancestor. */
+   overflow:visible on .tile-menu ensures the dropdown escapes the tile boundary. */
 .tile-menu {
   position: absolute;
   top: 4px;
   right: 4px;
-  z-index: 100;
+  z-index: 20;
   overflow: visible;
 }
 .tile-menu-btn {
@@ -280,18 +282,18 @@
 .tile-menu-btn:hover { background: var(--surface-2); color: var(--text); }
 .tile-menu-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
 
-/* Dropdown escapes tile bounds via fixed positioning anchored to viewport.
-   translateY(0) triggers a new stacking context so z-index works correctly. */
 .tile-dropdown {
   display: none;
-  position: fixed;
+  position: absolute;
+  top: calc(100% + 2px);
+  right: 0;
   background: var(--surface);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   box-shadow: var(--shadow);
   min-width: 120px;
   padding: .25rem 0;
-  z-index: 200;
+  z-index: 200;   /* above tiles, toolbar z-index is 10 */
 }
 .tile-dropdown.open { display: block; }
 
