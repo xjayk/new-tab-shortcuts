@@ -4,6 +4,10 @@
    so they are available before this file loads.
    ============================================================ */
 
+/* Ensure the HTML `hidden` attribute always wins, even against
+   classes like .btn that set display:inline-flex. */
+[hidden] { display: none !important; }
+
 /* === Layout === */
 
 .toolbar {
