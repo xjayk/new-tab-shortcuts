@@ -275,6 +275,8 @@ function handleClick(e) {
 function toggleEditMode() {
   editMode = !editMode;
   document.getElementById('edit-btn').classList.toggle('active', editMode);
+  document.getElementById('import-btn').hidden = !editMode;
+  document.getElementById('export-btn').hidden = !editMode;
   $addGroupBtn.hidden = !editMode;
   closeAllTileMenus();
   render();
