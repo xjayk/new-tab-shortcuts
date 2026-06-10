@@ -4,11 +4,6 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>New Tab</title>
-  <!--
-    Critical CSS is inlined here to guarantee zero render-blocking:
-    the page paints with layout and skeleton styles before any
-    external resource is fetched.
-  -->
   <style>
     /* === Reset & base === */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -39,7 +34,7 @@
       --shadow:      0 4px 24px rgba(0,0,0,.35);
     }
 
-    /* === Skeleton (visible before JS runs) === */
+    /* === Skeleton === */
     .skeleton-wrap { padding: 2.5rem 3rem; }
     .skeleton-group { margin-bottom: 2.5rem; }
     .skeleton-label {
@@ -70,17 +65,27 @@
   <!-- Toolbar -->
   <nav class="toolbar">
     <span class="toolbar-brand">New Tab</span>
-    <div class="toolbar-actions">
-      <button class="btn btn-sm" id="import-btn">Import</button>
-      <button class="btn btn-sm" id="export-btn">Export</button>
-      <button class="btn btn-sm" id="add-group-btn">+ New group</button>
+
+    <!-- Edit-mode buttons (hidden until edit mode is on) -->
+    <div class="toolbar-left">
+      <button class="btn btn-sm" id="import-btn" hidden>Import</button>
+      <button class="btn btn-sm" id="export-btn" hidden>Export</button>
+      <button class="btn btn-sm" id="add-group-btn" hidden>+ New group</button>
     </div>
+
+    <!-- Edit toggle — always visible, always far right -->
+    <label class="edit-toggle" id="edit-toggle" title="Toggle edit mode">
+      <input type="checkbox" id="edit-checkbox" />
+      <span class="edit-toggle-track">
+        <span class="edit-toggle-thumb"></span>
+      </span>
+      <span class="edit-toggle-label">Edit</span>
+    </label>
   </nav>
 
   <!-- Main content -->
   <main class="main">
     <div id="app">
-      <!-- Inline skeleton rendered before JS so the page is never blank -->
       <div class="skeleton-wrap">
         <div class="skeleton-group">
           <div class="skeleton-label"></div>
@@ -101,7 +106,6 @@
     </div>
   </main>
 
-  <!-- Deferred, non-blocking script -->
   <script type="module" src="newtab.js"></script>
 </body>
 </html>

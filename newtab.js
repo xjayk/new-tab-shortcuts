@@ -17,15 +17,18 @@ let state = { version: 1, groups: [] };
 let syncReady = false;
 
 // ---------------------------------------------------------------------------
-// Cached DOM references — resolved once at boot (Issue #3)
+// Cached DOM references — resolved once at boot
 // ---------------------------------------------------------------------------
 
 let $app;
 let $addGroupBtn;
+let $importBtn;
+let $exportBtn;
+let $editCheckbox;   // the <input type="checkbox"> inside the toggle
 let $modal = null;
 
 // ---------------------------------------------------------------------------
-// Debounce utility (Issue #1)
+// Debounce utility
 // ---------------------------------------------------------------------------
 
 function debounce(fn, ms) {
@@ -47,13 +50,46 @@ function debounce(fn, ms) {
 const debouncedSave = debounce(saveAll, 400);
 
 // ---------------------------------------------------------------------------
-// Self-write guard — skip onChange echo from our own writes (Issue #4)
+// Self-write guard — skip onChange echo from our own writes
 // ---------------------------------------------------------------------------
 
 const writtenStates = new Set();
 
 // ---------------------------------------------------------------------------
-// Render — uses cached $app (Issue #3)
+// Edit mode
+// ---------------------------------------------------------------------------
+
+let editMode = false;
+
+/**
+ * setEditMode(next) — single source of truth for edit mode state.
+ * NEVER writes back to $editCheckbox.checked here; the checkbox drives us,
+ * not the other way around (avoids a change-event feedback loop).
+ */
+function setEditMode(next) {
+  editMode = next;
+  $importBtn.hidden   = !editMode;
+  $exportBtn.hidden   = !editMode;
+  $addGroupBtn.hidden = !editMode;
+  closeAllTileMenus();
+  render();
+}
+
+// ---------------------------------------------------------------------------
+// Edit-gated actions — module-scoped Set for O(1) lookup
+// ---------------------------------------------------------------------------
+
+const EDIT_ACTIONS = new Set([
+  'add-shortcut',
+  'delete-shortcut',
+  'delete-group',
+  'rename-group',
+  'tile-menu',
+  'duplicate-shortcut',
+]);
+
+// ---------------------------------------------------------------------------
+// Render
 // ---------------------------------------------------------------------------
 
 function render() {
@@ -101,7 +137,7 @@ function renderEmpty(root) {
 }
 
 // ---------------------------------------------------------------------------
-// Surgical DOM patching via data-group-id (Issue #2)
+// Surgical DOM patching via data-group-id
 // ---------------------------------------------------------------------------
 
 function renderGroups(root) {
@@ -128,7 +164,7 @@ function renderGroups(root) {
     const existingChild = existingEls.get(group.id);
 
     if (existingChild) {
-      const groupStateStr = JSON.stringify(group);
+      const groupStateStr = JSON.stringify(group) + String(editMode);
       if (existingChild._groupState !== groupStateStr) {
         const temp = document.createElement('div');
         temp.innerHTML = newHtml;
@@ -147,7 +183,7 @@ function renderGroups(root) {
       const temp = document.createElement('div');
       temp.innerHTML = newHtml;
       const newChild = temp.firstElementChild;
-      newChild._groupState = JSON.stringify(group);
+      newChild._groupState = JSON.stringify(group) + String(editMode);
 
       const currentChildAtIndex = root.children[index];
       root.insertBefore(newChild, currentChildAtIndex || null);
@@ -158,20 +194,26 @@ function renderGroups(root) {
 
 function groupHTML(group) {
   const tiles = group.shortcuts.map(s => tileHTML(s, group.id)).join('');
+  const actions = editMode
+    ? `<div class="group-actions">
+        <button class="icon-btn" title="Add shortcut" data-action="add-shortcut" data-group-id="${group.id}">+</button>
+        <button class="icon-btn danger" title="Delete group" data-action="delete-group" data-group-id="${group.id}">✕</button>
+      </div>`
+    : '';
+  const addTile = editMode
+    ? `<button class="tile tile-add" data-action="add-shortcut" data-group-id="${group.id}" title="Add shortcut">
+        <span class="tile-add-icon">+</span>
+      </button>`
+    : '';
   return `
     <section class="group" data-group-id="${group.id}">
       <header class="group-header">
         <span class="group-name" data-action="rename-group" data-group-id="${group.id}">${escHtml(group.name)}</span>
-        <div class="group-actions">
-          <button class="icon-btn" title="Add shortcut" data-action="add-shortcut" data-group-id="${group.id}">+</button>
-          <button class="icon-btn danger" title="Delete group" data-action="delete-group" data-group-id="${group.id}">✕</button>
-        </div>
+        ${actions}
       </header>
       <div class="tiles">
         ${tiles}
-        <button class="tile tile-add" data-action="add-shortcut" data-group-id="${group.id}" title="Add shortcut">
-          <span class="tile-add-icon">+</span>
-        </button>
+        ${addTile}
       </div>
     </section>`;
 }
@@ -186,6 +228,18 @@ function tileHTML(shortcut, groupId) {
   const color = ACCENT_COLORS[colorIndex];
   const domain = domainFromUrl(shortcut.url);
   const faviconUrl = `https://www.google.com/s2/favicons?domain=${escAttr(domain)}&sz=64`;
+  const menu = editMode
+    ? `<span class="tile-menu">
+        <button class="tile-menu-btn" data-action="tile-menu" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"
+                title="More" tabindex="-1">⋮</button>
+        <div class="tile-dropdown">
+          <button class="tile-dropdown-item" data-action="duplicate-shortcut"
+                  data-shortcut-id="${shortcut.id}" data-group-id="${groupId}">Duplicate</button>
+          <button class="tile-dropdown-item danger" data-action="delete-shortcut"
+                  data-shortcut-id="${shortcut.id}" data-group-id="${groupId}">Delete</button>
+        </div>
+      </span>`
+    : '';
   return `
     <a class="tile" href="${escAttr(shortcut.url)}" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}">
       <span class="tile-icon">
@@ -194,15 +248,12 @@ function tileHTML(shortcut, groupId) {
         <span class="tile-fallback" style="background:${color}">${escHtml(initial)}</span>
       </span>
       <span class="tile-name">${escHtml(shortcut.name)}</span>
-      <button class="tile-delete icon-btn danger" data-action="delete-shortcut"
-              data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"
-              title="Remove shortcut" tabindex="-1">✕</button>
+      ${menu}
     </a>`;
 }
 
 // ---------------------------------------------------------------------------
 // Single delegated click listener — attached ONCE at boot.
-// Survives innerHTML replacement because it is bound to #app itself.
 // ---------------------------------------------------------------------------
 
 function initEventDelegation() {
@@ -217,12 +268,15 @@ function handleClick(e) {
   const groupId    = btn.dataset.groupId;
   const shortcutId = btn.dataset.shortcutId;
 
+  if (EDIT_ACTIONS.has(action) && !editMode) return;
+
   if (action === 'add-shortcut') {
     e.preventDefault();
     openAddModal(groupId);
   } else if (action === 'delete-shortcut') {
     e.preventDefault();
     e.stopPropagation();
+    closeAllTileMenus();
     deleteShortcut(groupId, shortcutId);
   } else if (action === 'delete-group') {
     e.preventDefault();
@@ -230,17 +284,33 @@ function handleClick(e) {
   } else if (action === 'rename-group') {
     e.preventDefault();
     startRename(btn, groupId);
+  } else if (action === 'tile-menu') {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleTileMenu(btn);
+  } else if (action === 'duplicate-shortcut') {
+    e.preventDefault();
+    e.stopPropagation();
+    closeAllTileMenus();
+    duplicateShortcut(groupId, shortcutId);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Toolbar — uses cached $addGroupBtn (Issue #3)
+// Toolbar
 // ---------------------------------------------------------------------------
 
 function initToolbar() {
+  // Checkbox is the source of truth — read its value, call setEditMode.
+  // We do NOT write back to $editCheckbox.checked inside setEditMode()
+  // to avoid triggering another 'change' event (feedback loop).
+  $editCheckbox.addEventListener('change', () => {
+    setEditMode($editCheckbox.checked);
+  });
+
   $addGroupBtn.addEventListener('click', () => promptAddGroup());
-  document.getElementById('export-btn').addEventListener('click', exportState);
-  document.getElementById('import-btn').addEventListener('click', triggerImport);
+  $exportBtn.addEventListener('click', exportState);
+  $importBtn.addEventListener('click', triggerImport);
 
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
@@ -307,7 +377,7 @@ function startRename(el, groupId) {
 }
 
 // ---------------------------------------------------------------------------
-// Shortcut operations — uses cached $modal (Issue #3)
+// Shortcut operations
 // ---------------------------------------------------------------------------
 
 function openAddModal(groupId) {
@@ -394,6 +464,54 @@ function deleteShortcut(groupId, shortcutId) {
   persist();
 }
 
+function duplicateShortcut(groupId, shortcutId) {
+  const group = state.groups.find(g => g.id === groupId);
+  if (!group) return;
+  const idx = group.shortcuts.findIndex(s => s.id === shortcutId);
+  if (idx === -1) return;
+  const original = group.shortcuts[idx];
+  const copy = { ...original, id: newId(), name: `${original.name} (copy)` };
+  const newShortcuts = [...group.shortcuts];
+  newShortcuts.splice(idx + 1, 0, copy);
+  state = {
+    ...state,
+    groups: state.groups.map(g =>
+      g.id === groupId ? { ...g, shortcuts: newShortcuts } : g
+    ),
+  };
+  persist();
+}
+
+function toggleTileMenu(btn) {
+  const tileMenu = btn.closest('.tile-menu');
+  if (!tileMenu) return;
+
+  const open = tileMenu.querySelector('.tile-dropdown.open');
+  if (open) {
+    open.classList.remove('open');
+    document.removeEventListener('click', closeOnOutsideClick);
+    return;
+  }
+
+  closeAllTileMenus();
+  const dropdown = tileMenu.querySelector('.tile-dropdown');
+  if (!dropdown) return;
+
+  dropdown.classList.add('open');
+  document.addEventListener('click', closeOnOutsideClick);
+}
+
+function closeAllTileMenus() {
+  document.querySelectorAll('.tile-dropdown.open').forEach(d => d.classList.remove('open'));
+  document.removeEventListener('click', closeOnOutsideClick);
+}
+
+function closeOnOutsideClick(e) {
+  if (!e.target.closest('.tile-menu')) {
+    closeAllTileMenus();
+  }
+}
+
 function closeModal() {
   const modalToClose = $modal;
   if (!modalToClose) return;
@@ -416,7 +534,7 @@ function closeModal() {
 }
 
 // ---------------------------------------------------------------------------
-// Persistence — debounced saveAll + self-write timestamp (Issues #1, #4)
+// Persistence
 // ---------------------------------------------------------------------------
 
 function persist() {
@@ -533,8 +651,34 @@ function showToast(message, type) {
 // ---------------------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', () => {
-  $app = document.getElementById('app');
-  $addGroupBtn = document.getElementById('add-group-btn');
+  $app          = document.getElementById('app');
+  $addGroupBtn  = document.getElementById('add-group-btn');
+  $importBtn    = document.getElementById('import-btn');
+  $exportBtn    = document.getElementById('export-btn');
+  $editCheckbox = document.getElementById('edit-checkbox');
+
+  // Ensure all edit-only controls start hidden (belt + suspenders with HTML hidden attr)
+  $addGroupBtn.hidden = true;
+  $importBtn.hidden   = true;
+  $exportBtn.hidden   = true;
+  $editCheckbox.checked = false;
+
+  document.addEventListener('keydown', e => {
+    if ((e.key === 'e' || e.key === 'E') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const tag = document.activeElement?.tagName;
+      if (!['INPUT', 'TEXTAREA', 'A', 'BUTTON', 'SELECT'].includes(tag)
+          && !document.activeElement?.closest('[contenteditable]')) {
+        // Programmatically toggle checkbox then dispatch change so the single handler fires
+        $editCheckbox.checked = !$editCheckbox.checked;
+        $editCheckbox.dispatchEvent(new Event('change'));
+      }
+    }
+    if (e.key === 'Escape' && editMode) {
+      if (document.querySelector('.rename-input')) return;
+      $editCheckbox.checked = false;
+      $editCheckbox.dispatchEvent(new Event('change'));
+    }
+  });
 
   initToolbar();
   initEventDelegation();
