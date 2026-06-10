@@ -357,11 +357,6 @@
   bottom: 1.5rem;
   right: 1.5rem;
   z-index: 1000;
-.toast {
-  position: fixed;
-  bottom: 1.5rem;
-  right: 1.5rem;
-  z-index: 1000;
   font-size: .78rem;
   padding: .35rem .65rem;
   border-radius: var(--radius-sm);

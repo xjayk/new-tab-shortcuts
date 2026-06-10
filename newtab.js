@@ -228,8 +228,7 @@ function handleClick(e) {
 // ---------------------------------------------------------------------------
 
 function initToolbar() {
-// TODO: Fix! Broken as a result of a merge conflict resolution <<<<<<< feat/import-export-shortcuts
-  document.getElementById('add-group-btn').addEventListener('click', () => promptAddGroup());
+  $addGroupBtn.addEventListener('click', () => promptAddGroup());
   document.getElementById('export-btn').addEventListener('click', exportState);
   document.getElementById('import-btn').addEventListener('click', triggerImport);
 
@@ -240,9 +239,6 @@ function initToolbar() {
   fileInput.id = 'import-file-input';
   fileInput.addEventListener('change', handleImportFile);
   document.body.appendChild(fileInput);
-// TODO: Fix! Broken as a result of a merge conflict resolution =======
-  $addGroupBtn.addEventListener('click', () => promptAddGroup());
-// TODO: Fix! Broken as a result of a merge conflict resolution >>>>>>> trunk
 }
 
 // ---------------------------------------------------------------------------
