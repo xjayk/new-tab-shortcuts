@@ -28,9 +28,9 @@ test.describe('New Tab Shortcuts Extension', () => {
     await page.goto(`file://${extensionPath}/newtab.html`);
 
     // Action buttons are present in the DOM with correct labels
-    await expect(page.locator('#add-group-btn')).toHaveText('+ New group');
-    await expect(page.locator('#import-btn')).toHaveText('Import');
-    await expect(page.locator('#export-btn')).toHaveText('Export');
+    await expect(page.locator('#add-group-btn')).toHaveText('+ group');
+    await expect(page.locator('#import-btn')).toHaveText('import');
+    await expect(page.locator('#export-btn')).toHaveText('export');
 
     // All action buttons are hidden by default (view mode)
     await expect(page.locator('#add-group-btn')).toBeHidden();
@@ -42,6 +42,6 @@ test.describe('New Tab Shortcuts Extension', () => {
     await expect(page.locator('.edit-toggle-label')).toHaveText('Edit');
 
     // The toolbar-left div groups the edit-mode buttons together
-    await expect(page.locator('.toolbar-left')).toContainText('+ New group');
+    await expect(page.locator('.toolbar-left')).toContainText('+ group');
   });
 });
