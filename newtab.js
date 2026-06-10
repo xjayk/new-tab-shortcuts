@@ -50,7 +50,7 @@ const debouncedSave = debounce(saveAll, 400);
 // Self-write guard — skip onChange echo from our own writes (Issue #4)
 // ---------------------------------------------------------------------------
 
-let _lastWrittenStateStr = '';
+const writtenStates = new Set();
 
 // ---------------------------------------------------------------------------
 // Render — uses cached $app (Issue #3)
@@ -385,23 +385,23 @@ function deleteShortcut(groupId, shortcutId) {
 }
 
 function closeModal() {
-  if ($modal) {
-    $modal.classList.add('modal-closing');
-    const cleanup = () => {
-      if ($modal) {
-        $modal.remove();
-        $modal = null;
-      }
-    };
-    const styles = window.getComputedStyle($modal);
-    const hasAnimation = styles.animationName
-      && styles.animationName !== 'none'
-      && styles.animationDuration !== '0s';
-    if (hasAnimation) {
-      $modal.addEventListener('animationend', cleanup, { once: true });
-    } else {
-      cleanup();
+  const modalToClose = $modal;
+  if (!modalToClose) return;
+  modalToClose.classList.add('modal-closing');
+  const cleanup = () => {
+    if (modalToClose && modalToClose.isConnected) {
+      modalToClose.remove();
+      if ($modal === modalToClose) $modal = null;
     }
+  };
+  const styles = window.getComputedStyle(modalToClose);
+  const hasAnimation = styles.animationName
+    && styles.animationName !== 'none'
+    && styles.animationDuration !== '0s';
+  if (hasAnimation) {
+    modalToClose.addEventListener('animationend', cleanup, { once: true });
+  } else {
+    cleanup();
   }
 }
 
@@ -411,7 +411,12 @@ function closeModal() {
 
 function persist() {
   render();
-  _lastWrittenStateStr = JSON.stringify(state);
+  const stateStr = JSON.stringify(state);
+  writtenStates.add(stateStr);
+  if (writtenStates.size > 10) {
+    const oldest = writtenStates.keys().next().value;
+    writtenStates.delete(oldest);
+  }
   debouncedSave(state);
 }
 
@@ -543,10 +548,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   onChange(syncState => {
     const syncStateStr = JSON.stringify(syncState);
-    if (syncStateStr === _lastWrittenStateStr) return;
+    if (writtenStates.has(syncStateStr)) return;
     debouncedSave.cancel();
     state = syncState;
-    _lastWrittenStateStr = syncStateStr;
     render();
   });
 });
