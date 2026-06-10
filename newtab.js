@@ -61,6 +61,20 @@ const writtenStates = new Set();
 
 let editMode = false;
 
+/**
+ * setEditMode(next) — single source of truth for edit mode state.
+ * NEVER writes back to $editCheckbox.checked here; the checkbox drives us,
+ * not the other way around (avoids a change-event feedback loop).
+ */
+function setEditMode(next) {
+  editMode = next;
+  $importBtn.hidden   = !editMode;
+  $exportBtn.hidden   = !editMode;
+  $addGroupBtn.hidden = !editMode;
+  closeAllTileMenus();
+  render();
+}
+
 // ---------------------------------------------------------------------------
 // Edit-gated actions — module-scoped Set for O(1) lookup
 // ---------------------------------------------------------------------------
@@ -286,21 +300,14 @@ function handleClick(e) {
 // Toolbar
 // ---------------------------------------------------------------------------
 
-function toggleEditMode() {
-  editMode = !editMode;
-  // Drive the checkbox checked state — CSS handles all visual feedback
-  $editCheckbox.checked = editMode;
-  $importBtn.hidden   = !editMode;
-  $exportBtn.hidden   = !editMode;
-  $addGroupBtn.hidden = !editMode;
-  closeAllTileMenus();
-  render();
-}
-
 function initToolbar() {
-  // The label click naturally toggles the checkbox; we listen on the
-  // checkbox change event so toggleEditMode() is the single source of truth.
-  $editCheckbox.addEventListener('change', toggleEditMode);
+  // Checkbox is the source of truth — read its value, call setEditMode.
+  // We do NOT write back to $editCheckbox.checked inside setEditMode()
+  // to avoid triggering another 'change' event (feedback loop).
+  $editCheckbox.addEventListener('change', () => {
+    setEditMode($editCheckbox.checked);
+  });
+
   $addGroupBtn.addEventListener('click', () => promptAddGroup());
   $exportBtn.addEventListener('click', exportState);
   $importBtn.addEventListener('click', triggerImport);
@@ -650,22 +657,26 @@ document.addEventListener('DOMContentLoaded', () => {
   $exportBtn    = document.getElementById('export-btn');
   $editCheckbox = document.getElementById('edit-checkbox');
 
-  // All edit-only controls start hidden
+  // Ensure all edit-only controls start hidden (belt + suspenders with HTML hidden attr)
   $addGroupBtn.hidden = true;
   $importBtn.hidden   = true;
   $exportBtn.hidden   = true;
+  $editCheckbox.checked = false;
 
   document.addEventListener('keydown', e => {
     if ((e.key === 'e' || e.key === 'E') && !e.metaKey && !e.ctrlKey && !e.altKey) {
       const tag = document.activeElement?.tagName;
       if (!['INPUT', 'TEXTAREA', 'A', 'BUTTON', 'SELECT'].includes(tag)
           && !document.activeElement?.closest('[contenteditable]')) {
-        toggleEditMode();
+        // Programmatically toggle checkbox then dispatch change so the single handler fires
+        $editCheckbox.checked = !$editCheckbox.checked;
+        $editCheckbox.dispatchEvent(new Event('change'));
       }
     }
     if (e.key === 'Escape' && editMode) {
       if (document.querySelector('.rename-input')) return;
-      toggleEditMode();
+      $editCheckbox.checked = false;
+      $editCheckbox.dispatchEvent(new Event('change'));
     }
   });
 
