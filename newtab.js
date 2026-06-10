@@ -17,18 +17,18 @@ let state = { version: 1, groups: [] };
 let syncReady = false;
 
 // ---------------------------------------------------------------------------
-// Cached DOM references — resolved once at boot (Issue #3)
+// Cached DOM references — resolved once at boot
 // ---------------------------------------------------------------------------
 
 let $app;
 let $addGroupBtn;
-let $editBtn;
 let $importBtn;
 let $exportBtn;
+let $editCheckbox;   // the <input type="checkbox"> inside the toggle
 let $modal = null;
 
 // ---------------------------------------------------------------------------
-// Debounce utility (Issue #1)
+// Debounce utility
 // ---------------------------------------------------------------------------
 
 function debounce(fn, ms) {
@@ -50,19 +50,19 @@ function debounce(fn, ms) {
 const debouncedSave = debounce(saveAll, 400);
 
 // ---------------------------------------------------------------------------
-// Self-write guard — skip onChange echo from our own writes (Issue #4)
+// Self-write guard — skip onChange echo from our own writes
 // ---------------------------------------------------------------------------
 
 const writtenStates = new Set();
 
 // ---------------------------------------------------------------------------
-// Edit mode — all edit controls hidden by default
+// Edit mode
 // ---------------------------------------------------------------------------
 
 let editMode = false;
 
 // ---------------------------------------------------------------------------
-// Edit-gated actions — module-scoped Set for O(1) lookup (Issue #4 review fix)
+// Edit-gated actions — module-scoped Set for O(1) lookup
 // ---------------------------------------------------------------------------
 
 const EDIT_ACTIONS = new Set([
@@ -75,7 +75,7 @@ const EDIT_ACTIONS = new Set([
 ]);
 
 // ---------------------------------------------------------------------------
-// Render — uses cached $app (Issue #3)
+// Render
 // ---------------------------------------------------------------------------
 
 function render() {
@@ -123,7 +123,7 @@ function renderEmpty(root) {
 }
 
 // ---------------------------------------------------------------------------
-// Surgical DOM patching via data-group-id (Issue #2)
+// Surgical DOM patching via data-group-id
 // ---------------------------------------------------------------------------
 
 function renderGroups(root) {
@@ -240,7 +240,6 @@ function tileHTML(shortcut, groupId) {
 
 // ---------------------------------------------------------------------------
 // Single delegated click listener — attached ONCE at boot.
-// Survives innerHTML replacement because it is bound to #app itself.
 // ---------------------------------------------------------------------------
 
 function initEventDelegation() {
@@ -255,7 +254,6 @@ function handleClick(e) {
   const groupId    = btn.dataset.groupId;
   const shortcutId = btn.dataset.shortcutId;
 
-  // Issue #4 fix: module-scoped Set instead of per-call Array allocation
   if (EDIT_ACTIONS.has(action) && !editMode) return;
 
   if (action === 'add-shortcut') {
@@ -274,9 +272,6 @@ function handleClick(e) {
     startRename(btn, groupId);
   } else if (action === 'tile-menu') {
     e.preventDefault();
-    // Issue #3 fix: stopPropagation here suppresses the click from reaching
-    // the document-level outside-click listener synchronously, so no
-    // setTimeout deferral is needed when registering that listener.
     e.stopPropagation();
     toggleTileMenu(btn);
   } else if (action === 'duplicate-shortcut') {
@@ -288,22 +283,24 @@ function handleClick(e) {
 }
 
 // ---------------------------------------------------------------------------
-// Toolbar — uses cached toolbar refs (Issue #1 review fix)
+// Toolbar
 // ---------------------------------------------------------------------------
 
 function toggleEditMode() {
   editMode = !editMode;
-  // Issue #1 fix: use cached refs — no live getElementById calls
-  $editBtn.classList.toggle('active', editMode);
-  $importBtn.hidden = !editMode;
-  $exportBtn.hidden = !editMode;
+  // Drive the checkbox checked state — CSS handles all visual feedback
+  $editCheckbox.checked = editMode;
+  $importBtn.hidden   = !editMode;
+  $exportBtn.hidden   = !editMode;
   $addGroupBtn.hidden = !editMode;
   closeAllTileMenus();
   render();
 }
 
 function initToolbar() {
-  $editBtn.addEventListener('click', toggleEditMode);
+  // The label click naturally toggles the checkbox; we listen on the
+  // checkbox change event so toggleEditMode() is the single source of truth.
+  $editCheckbox.addEventListener('change', toggleEditMode);
   $addGroupBtn.addEventListener('click', () => promptAddGroup());
   $exportBtn.addEventListener('click', exportState);
   $importBtn.addEventListener('click', triggerImport);
@@ -373,7 +370,7 @@ function startRename(el, groupId) {
 }
 
 // ---------------------------------------------------------------------------
-// Shortcut operations — uses cached $modal (Issue #3)
+// Shortcut operations
 // ---------------------------------------------------------------------------
 
 function openAddModal(groupId) {
@@ -466,7 +463,6 @@ function duplicateShortcut(groupId, shortcutId) {
   const idx = group.shortcuts.findIndex(s => s.id === shortcutId);
   if (idx === -1) return;
   const original = group.shortcuts[idx];
-  // Issue #6 fix: append " (copy)" so the duplicate is visually distinguishable
   const copy = { ...original, id: newId(), name: `${original.name} (copy)` };
   const newShortcuts = [...group.shortcuts];
   newShortcuts.splice(idx + 1, 0, copy);
@@ -480,7 +476,6 @@ function duplicateShortcut(groupId, shortcutId) {
 }
 
 function toggleTileMenu(btn) {
-  // Issue #2 fix: use closest() instead of parentElement for resilient traversal
   const tileMenu = btn.closest('.tile-menu');
   if (!tileMenu) return;
 
@@ -496,8 +491,6 @@ function toggleTileMenu(btn) {
   if (!dropdown) return;
 
   dropdown.classList.add('open');
-  // Issue #3 fix: stopPropagation() in handleClick already consumed this event;
-  // the outside-click listener can be registered synchronously — no setTimeout needed.
   document.addEventListener('click', closeOnOutsideClick);
 }
 
@@ -534,7 +527,7 @@ function closeModal() {
 }
 
 // ---------------------------------------------------------------------------
-// Persistence — debounced saveAll + self-write guard (Issues #1, #4)
+// Persistence
 // ---------------------------------------------------------------------------
 
 function persist() {
@@ -651,19 +644,18 @@ function showToast(message, type) {
 // ---------------------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', () => {
-  $app         = document.getElementById('app');
-  $addGroupBtn = document.getElementById('add-group-btn');
-  $editBtn     = document.getElementById('edit-btn');
-  $importBtn   = document.getElementById('import-btn');
-  $exportBtn   = document.getElementById('export-btn');
+  $app          = document.getElementById('app');
+  $addGroupBtn  = document.getElementById('add-group-btn');
+  $importBtn    = document.getElementById('import-btn');
+  $exportBtn    = document.getElementById('export-btn');
+  $editCheckbox = document.getElementById('edit-checkbox');
 
-  // All edit controls start hidden
+  // All edit-only controls start hidden
   $addGroupBtn.hidden = true;
   $importBtn.hidden   = true;
   $exportBtn.hidden   = true;
 
   document.addEventListener('keydown', e => {
-    // Issue #8 fix: guard modifier keys and focused interactive elements
     if ((e.key === 'e' || e.key === 'E') && !e.metaKey && !e.ctrlKey && !e.altKey) {
       const tag = document.activeElement?.tagName;
       if (!['INPUT', 'TEXTAREA', 'A', 'BUTTON', 'SELECT'].includes(tag)
@@ -671,8 +663,6 @@ document.addEventListener('DOMContentLoaded', () => {
         toggleEditMode();
       }
     }
-    // Issue #5 fix: do not exit edit mode via Escape if a rename input is active;
-    // let startRename()'s own keydown handler consume the event first.
     if (e.key === 'Escape' && editMode) {
       if (document.querySelector('.rename-input')) return;
       toggleEditMode();

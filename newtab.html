@@ -73,7 +73,16 @@
     <div class="toolbar-actions">
       <button class="btn btn-sm" id="import-btn" hidden>Import</button>
       <button class="btn btn-sm" id="export-btn" hidden>Export</button>
-      <button class="btn btn-sm" id="edit-btn">✎ Edit</button>
+
+      <!-- Edit mode pill toggle -->
+      <label class="edit-toggle" id="edit-toggle" title="Toggle edit mode">
+        <input type="checkbox" id="edit-checkbox" />
+        <span class="edit-toggle-track">
+          <span class="edit-toggle-thumb"></span>
+        </span>
+        <span class="edit-toggle-label">Edit</span>
+      </label>
+
       <button class="btn btn-sm" id="add-group-btn" hidden>+ New group</button>
     </div>
   </nav>
