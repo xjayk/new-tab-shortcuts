@@ -188,10 +188,10 @@ function tileHTML(shortcut, groupId) {
   const faviconUrl = `https://www.google.com/s2/favicons?domain=${escAttr(domain)}&sz=64`;
   return `
     <a class="tile" href="${escAttr(shortcut.url)}" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}">
-      <span class="tile-icon" style="background:${color}">
+      <span class="tile-icon">
         <img class="tile-favicon" src="${faviconUrl}" alt=""
-             onerror="this.parentElement.classList.add('tile-icon--fallback')">
-        <span class="tile-fallback">${escHtml(initial)}</span>
+             onerror="this.style.display='none';this.parentElement.classList.add('tile-icon--fallback')">
+        <span class="tile-fallback" style="background:${color}">${escHtml(initial)}</span>
       </span>
       <span class="tile-name">${escHtml(shortcut.name)}</span>
       <button class="tile-delete icon-btn danger" data-action="delete-shortcut"
