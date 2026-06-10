@@ -473,10 +473,17 @@ function handleImportFile(e) {
   reader.addEventListener('load', evt => {
     try {
       const parsed = JSON.parse(evt.target.result);
-      if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.groups)) {
+      if (
+        !parsed || typeof parsed !== 'object'
+        || typeof parsed.version !== 'number'
+        || !Array.isArray(parsed.groups)
+      ) {
         throw new Error('Invalid backup format');
       }
       const validated = validate(parsed);
+      if (parsed.groups.length > 0 && validated.groups.length === 0) {
+        throw new Error('Invalid backup format');
+      }
       state = validated;
       persist();
       showToast('Import successful', 'success');
