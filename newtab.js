@@ -382,8 +382,26 @@ function deleteGroup(groupId) {
   const group = state.groups.find(g => g.id === groupId);
   if (!group) return;
   const hasShortcuts = group.shortcuts.length > 0;
-  if (hasShortcuts && !confirm(`Delete group "${group.name}" and its ${group.shortcuts.length} shortcut(s)?`)) return;
-  state = { ...state, groups: state.groups.filter(g => g.id !== groupId) };
+
+  if (hasShortcuts) {
+    const keep = confirm(
+      `Delete group "${group.name}"?\n` +
+      `• OK → move ${group.shortcuts.length} shortcut(s) to ungrouped\n` +
+      `• Cancel → delete group AND its shortcuts`
+    );
+    if (keep) {
+      state = {
+        ...state,
+        shortcuts: [...state.shortcuts, ...group.shortcuts],
+        groups: state.groups.filter(g => g.id !== groupId),
+      };
+    } else {
+      if (!confirm(`Permanently delete "${group.name}" and all ${group.shortcuts.length} shortcuts?`)) return;
+      state = { ...state, groups: state.groups.filter(g => g.id !== groupId) };
+    }
+  } else {
+    state = { ...state, groups: state.groups.filter(g => g.id !== groupId) };
+  }
   persist();
 }
 
