@@ -14,7 +14,7 @@ const SCHEMA_VERSION = 1;
 
 /** @typedef {{ id: string, name: string, url: string }} Shortcut */
 /** @typedef {{ id: string, name: string, shortcuts: Shortcut[] }} Group */
-/** @typedef {{ version: number, groups: Group[] }} AppState */
+/** @typedef {{ version: number, groups: Group[], shortcuts: Shortcut[] }} AppState */
 
 /**
  * Returns a validated, migrated state object.
@@ -24,7 +24,7 @@ const SCHEMA_VERSION = 1;
  */
 function validate(raw) {
   if (!raw || typeof raw !== 'object' || !Array.isArray(raw.groups)) {
-    return { version: SCHEMA_VERSION, groups: [] };
+    return { version: SCHEMA_VERSION, groups: [], shortcuts: [] };
   }
   const groups = raw.groups
     .filter(g => g && typeof g === 'object')
@@ -41,7 +41,16 @@ function validate(raw) {
             }))
         : [],
     }));
-  return { version: SCHEMA_VERSION, groups };
+  const shortcuts = Array.isArray(raw.shortcuts)
+    ? raw.shortcuts
+        .filter(s => s && typeof s === 'object' && typeof s.url === 'string')
+        .map(s => ({
+          id: typeof s.id === 'string' ? s.id : uid(),
+          name: typeof s.name === 'string' ? s.name : s.url,
+          url: s.url,
+        }))
+    : [];
+  return { version: SCHEMA_VERSION, groups, shortcuts };
 }
 
 /** Generate a short unique ID */
@@ -101,7 +110,7 @@ async function saveAll(state) {
  */
 async function init(onLocalReady, onSyncReady) {
   const local = await readLocal();
-  onLocalReady(local ?? { version: SCHEMA_VERSION, groups: [] });
+  onLocalReady(local ?? { version: SCHEMA_VERSION, groups: [], shortcuts: [] });
 
   const synced = await readSync();
   if (synced) {
@@ -117,7 +126,7 @@ async function init(onLocalReady, onSyncReady) {
     );
     onSyncReady(local);
   } else {
-    onSyncReady({ version: SCHEMA_VERSION, groups: [] });
+    onSyncReady({ version: SCHEMA_VERSION, groups: [], shortcuts: [] });
   }
 }
 

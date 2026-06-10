@@ -12,7 +12,7 @@ import { init, saveAll, onChange, newId, validate } from './storage.js';
 // State
 // ---------------------------------------------------------------------------
 
-let state = { version: 1, groups: [] };
+let state = { version: 1, groups: [], shortcuts: [] };
 
 let syncReady = false;
 
@@ -62,7 +62,7 @@ function render() {
     return;
   }
 
-  if (state.groups.length === 0) {
+  if (state.groups.length === 0 && state.shortcuts.length === 0) {
     renderEmpty($app);
   } else {
     renderGroups($app);
@@ -105,6 +105,7 @@ function renderEmpty(root) {
 // ---------------------------------------------------------------------------
 
 function renderGroups(root) {
+  const UNGROUPED_ID = '__ungrouped__';
   const existingEls = new Map();
   for (const child of [...root.children]) {
     const gid = child.dataset?.groupId;
@@ -116,6 +117,7 @@ function renderGroups(root) {
   }
 
   const activeIds = new Set(state.groups.map(g => g.id));
+  if (state.shortcuts.length > 0) activeIds.add(UNGROUPED_ID);
   for (const [gid, child] of existingEls) {
     if (!activeIds.has(gid)) {
       child.remove();
@@ -154,6 +156,31 @@ function renderGroups(root) {
       existingEls.set(group.id, newChild);
     }
   });
+
+  if (state.shortcuts.length > 0) {
+    const ungroupedHtml = ungroupedHTML();
+    const existingUngrouped = existingEls.get(UNGROUPED_ID);
+    const ungroupedStateStr = JSON.stringify(state.shortcuts);
+    if (existingUngrouped) {
+      if (existingUngrouped._groupState !== ungroupedStateStr) {
+        const temp = document.createElement('div');
+        temp.innerHTML = ungroupedHtml;
+        const newChild = temp.firstElementChild;
+        newChild._groupState = ungroupedStateStr;
+        existingUngrouped.replaceWith(newChild);
+        existingEls.set(UNGROUPED_ID, newChild);
+      }
+      const updatedChild = existingEls.get(UNGROUPED_ID);
+      root.appendChild(updatedChild);
+    } else {
+      const temp = document.createElement('div');
+      temp.innerHTML = ungroupedHtml;
+      const newChild = temp.firstElementChild;
+      newChild._groupState = ungroupedStateStr;
+      root.appendChild(newChild);
+      existingEls.set(UNGROUPED_ID, newChild);
+    }
+  }
 }
 
 function groupHTML(group) {
@@ -170,6 +197,19 @@ function groupHTML(group) {
       <div class="tiles">
         ${tiles}
         <button class="tile tile-add" data-action="add-shortcut" data-group-id="${group.id}" title="Add shortcut">
+          <span class="tile-add-icon">+</span>
+        </button>
+      </div>
+    </section>`;
+}
+
+function ungroupedHTML() {
+  const tiles = state.shortcuts.map(s => tileHTML(s, '')).join('');
+  return `
+    <section class="group ungrouped" data-group-id="__ungrouped__">
+      <div class="tiles">
+        ${tiles}
+        <button class="tile tile-add" data-action="add-shortcut" title="Add shortcut">
           <span class="tile-add-icon">+</span>
         </button>
       </div>
@@ -239,6 +279,7 @@ function handleClick(e) {
 
 function initToolbar() {
   $addGroupBtn.addEventListener('click', () => promptAddGroup());
+  document.getElementById('add-shortcut-btn').addEventListener('click', () => openAddModal());
   document.getElementById('export-btn').addEventListener('click', exportState);
   document.getElementById('import-btn').addEventListener('click', triggerImport);
 
@@ -313,8 +354,10 @@ function startRename(el, groupId) {
 function openAddModal(groupId) {
   if ($modal) $modal.remove();
 
-  const group = state.groups.find(g => g.id === groupId);
-  if (!group) return;
+  if (groupId) {
+    const group = state.groups.find(g => g.id === groupId);
+    if (!group) return;
+  }
 
   $modal = document.createElement('div');
   $modal.id = 'shortcut-modal';
@@ -371,26 +414,34 @@ function saveShortcut(groupId, nameInput, urlInput, errEl) {
 
   const shortcut = { id: newId(), name: name || url, url };
 
-  state = {
-    ...state,
-    groups: state.groups.map(g =>
-      g.id === groupId ? { ...g, shortcuts: [...g.shortcuts, shortcut] } : g
-    ),
-  };
+  if (groupId) {
+    state = {
+      ...state,
+      groups: state.groups.map(g =>
+        g.id === groupId ? { ...g, shortcuts: [...g.shortcuts, shortcut] } : g
+      ),
+    };
+  } else {
+    state = { ...state, shortcuts: [...state.shortcuts, shortcut] };
+  }
 
   closeModal();
   persist();
 }
 
 function deleteShortcut(groupId, shortcutId) {
-  state = {
-    ...state,
-    groups: state.groups.map(g =>
-      g.id === groupId
-        ? { ...g, shortcuts: g.shortcuts.filter(s => s.id !== shortcutId) }
-        : g
-    ),
-  };
+  if (groupId) {
+    state = {
+      ...state,
+      groups: state.groups.map(g =>
+        g.id === groupId
+          ? { ...g, shortcuts: g.shortcuts.filter(s => s.id !== shortcutId) }
+          : g
+      ),
+    };
+  } else {
+    state = { ...state, shortcuts: state.shortcuts.filter(s => s.id !== shortcutId) };
+  }
   persist();
 }
 
