@@ -144,4 +144,4 @@ function newId() {
   return uid();
 }
 
-export { init, saveAll, onChange, newId };
+export { init, saveAll, onChange, newId, validate };

@@ -6,7 +6,7 @@
  * at boot — never re-attached on re-renders, so it can't accumulate.
  */
 
-import { init, saveAll, onChange, newId } from './storage.js';
+import { init, saveAll, onChange, newId, validate } from './storage.js';
 
 // ---------------------------------------------------------------------------
 // State
@@ -155,6 +155,16 @@ function handleClick(e) {
 
 function initToolbar() {
   document.getElementById('add-group-btn').addEventListener('click', () => promptAddGroup());
+  document.getElementById('export-btn').addEventListener('click', exportState);
+  document.getElementById('import-btn').addEventListener('click', triggerImport);
+
+  const fileInput = document.createElement('input');
+  fileInput.type = 'file';
+  fileInput.accept = '.json';
+  fileInput.style.display = 'none';
+  fileInput.id = 'import-file-input';
+  fileInput.addEventListener('change', handleImportFile);
+  document.body.appendChild(fileInput);
 }
 
 // ---------------------------------------------------------------------------
@@ -344,6 +354,70 @@ function hashStr(str) {
     h = Math.imul(31, h) + str.charCodeAt(i) | 0;
   }
   return h;
+}
+
+// ---------------------------------------------------------------------------
+// Import / Export
+// ---------------------------------------------------------------------------
+
+function exportState() {
+  const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  const date = new Date().toISOString().split('T')[0];
+  a.download = `shortcuts-${date}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function triggerImport() {
+  const input = document.getElementById('import-file-input');
+  input.value = '';
+  input.click();
+}
+
+function handleImportFile(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.addEventListener('load', evt => {
+    try {
+      const parsed = JSON.parse(evt.target.result);
+      if (!parsed || typeof parsed !== 'object' || !Array.isArray(parsed.groups)) {
+        throw new Error('Invalid backup format');
+      }
+      const validated = validate(parsed);
+      state = validated;
+      persist();
+      showToast('Import successful', 'success');
+    } catch {
+      showToast('Import failed: invalid file', 'error');
+    }
+  });
+  reader.addEventListener('error', () => {
+    showToast('Import failed: could not read file', 'error');
+  });
+  reader.readAsText(file);
+}
+
+function showToast(message, type) {
+  const existing = document.getElementById('import-toast');
+  if (existing) existing.remove();
+
+  const toast = document.createElement('div');
+  toast.id = 'import-toast';
+  toast.className = `toast toast-${type}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+
+  setTimeout(() => {
+    toast.classList.add('toast-fade');
+    toast.addEventListener('transitionend', () => toast.remove(), { once: true });
+  }, 2500);
 }
 
 // ---------------------------------------------------------------------------
