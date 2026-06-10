@@ -201,6 +201,20 @@
   flex-shrink: 0;
 }
 
+.tile-favicon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.tile-fallback {
+  display: none;
+}
+
+.tile-icon--fallback .tile-favicon { display: none; }
+.tile-icon--fallback .tile-fallback { display: inline; }
+
 .tile-name {
   font-size: .72rem;
   font-weight: 500;
