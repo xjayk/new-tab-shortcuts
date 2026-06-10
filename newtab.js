@@ -22,6 +22,9 @@ let syncReady = false;
 
 let $app;
 let $addGroupBtn;
+let $editBtn;
+let $importBtn;
+let $exportBtn;
 let $modal = null;
 
 // ---------------------------------------------------------------------------
@@ -57,6 +60,19 @@ const writtenStates = new Set();
 // ---------------------------------------------------------------------------
 
 let editMode = false;
+
+// ---------------------------------------------------------------------------
+// Edit-gated actions — module-scoped Set for O(1) lookup (Issue #4 review fix)
+// ---------------------------------------------------------------------------
+
+const EDIT_ACTIONS = new Set([
+  'add-shortcut',
+  'delete-shortcut',
+  'delete-group',
+  'rename-group',
+  'tile-menu',
+  'duplicate-shortcut',
+]);
 
 // ---------------------------------------------------------------------------
 // Render — uses cached $app (Issue #3)
@@ -134,7 +150,7 @@ function renderGroups(root) {
     const existingChild = existingEls.get(group.id);
 
     if (existingChild) {
-      const groupStateStr = JSON.stringify(group);
+      const groupStateStr = JSON.stringify(group) + String(editMode);
       if (existingChild._groupState !== groupStateStr) {
         const temp = document.createElement('div');
         temp.innerHTML = newHtml;
@@ -153,7 +169,7 @@ function renderGroups(root) {
       const temp = document.createElement('div');
       temp.innerHTML = newHtml;
       const newChild = temp.firstElementChild;
-      newChild._groupState = JSON.stringify(group);
+      newChild._groupState = JSON.stringify(group) + String(editMode);
 
       const currentChildAtIndex = root.children[index];
       root.insertBefore(newChild, currentChildAtIndex || null);
@@ -239,8 +255,8 @@ function handleClick(e) {
   const groupId    = btn.dataset.groupId;
   const shortcutId = btn.dataset.shortcutId;
 
-  const editActions = ['add-shortcut', 'delete-shortcut', 'delete-group', 'rename-group', 'tile-menu', 'duplicate-shortcut'];
-  if (editActions.includes(action) && !editMode) return;
+  // Issue #4 fix: module-scoped Set instead of per-call Array allocation
+  if (EDIT_ACTIONS.has(action) && !editMode) return;
 
   if (action === 'add-shortcut') {
     e.preventDefault();
@@ -258,6 +274,9 @@ function handleClick(e) {
     startRename(btn, groupId);
   } else if (action === 'tile-menu') {
     e.preventDefault();
+    // Issue #3 fix: stopPropagation here suppresses the click from reaching
+    // the document-level outside-click listener synchronously, so no
+    // setTimeout deferral is needed when registering that listener.
     e.stopPropagation();
     toggleTileMenu(btn);
   } else if (action === 'duplicate-shortcut') {
@@ -269,24 +288,25 @@ function handleClick(e) {
 }
 
 // ---------------------------------------------------------------------------
-// Toolbar — uses cached $addGroupBtn (Issue #3)
+// Toolbar — uses cached toolbar refs (Issue #1 review fix)
 // ---------------------------------------------------------------------------
 
 function toggleEditMode() {
   editMode = !editMode;
-  document.getElementById('edit-btn').classList.toggle('active', editMode);
-  document.getElementById('import-btn').hidden = !editMode;
-  document.getElementById('export-btn').hidden = !editMode;
+  // Issue #1 fix: use cached refs — no live getElementById calls
+  $editBtn.classList.toggle('active', editMode);
+  $importBtn.hidden = !editMode;
+  $exportBtn.hidden = !editMode;
   $addGroupBtn.hidden = !editMode;
   closeAllTileMenus();
   render();
 }
 
 function initToolbar() {
-  document.getElementById('edit-btn').addEventListener('click', toggleEditMode);
+  $editBtn.addEventListener('click', toggleEditMode);
   $addGroupBtn.addEventListener('click', () => promptAddGroup());
-  document.getElementById('export-btn').addEventListener('click', exportState);
-  document.getElementById('import-btn').addEventListener('click', triggerImport);
+  $exportBtn.addEventListener('click', exportState);
+  $importBtn.addEventListener('click', triggerImport);
 
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
@@ -446,7 +466,8 @@ function duplicateShortcut(groupId, shortcutId) {
   const idx = group.shortcuts.findIndex(s => s.id === shortcutId);
   if (idx === -1) return;
   const original = group.shortcuts[idx];
-  const copy = { ...original, id: newId() };
+  // Issue #6 fix: append " (copy)" so the duplicate is visually distinguishable
+  const copy = { ...original, id: newId(), name: `${original.name} (copy)` };
   const newShortcuts = [...group.shortcuts];
   newShortcuts.splice(idx + 1, 0, copy);
   state = {
@@ -459,18 +480,25 @@ function duplicateShortcut(groupId, shortcutId) {
 }
 
 function toggleTileMenu(btn) {
-  const open = document.querySelector('.tile-dropdown.open');
-  if (open && open.closest('.tile-menu').contains(btn)) {
+  // Issue #2 fix: use closest() instead of parentElement for resilient traversal
+  const tileMenu = btn.closest('.tile-menu');
+  if (!tileMenu) return;
+
+  const open = tileMenu.querySelector('.tile-dropdown.open');
+  if (open) {
     open.classList.remove('open');
     document.removeEventListener('click', closeOnOutsideClick);
     return;
   }
+
   closeAllTileMenus();
-  const dropdown = btn.parentElement.querySelector('.tile-dropdown');
-  if (dropdown) {
-    dropdown.classList.add('open');
-    setTimeout(() => document.addEventListener('click', closeOnOutsideClick), 0);
-  }
+  const dropdown = tileMenu.querySelector('.tile-dropdown');
+  if (!dropdown) return;
+
+  dropdown.classList.add('open');
+  // Issue #3 fix: stopPropagation() in handleClick already consumed this event;
+  // the outside-click listener can be registered synchronously — no setTimeout needed.
+  document.addEventListener('click', closeOnOutsideClick);
 }
 
 function closeAllTileMenus() {
@@ -506,7 +534,7 @@ function closeModal() {
 }
 
 // ---------------------------------------------------------------------------
-// Persistence — debounced saveAll + self-write timestamp (Issues #1, #4)
+// Persistence — debounced saveAll + self-write guard (Issues #1, #4)
 // ---------------------------------------------------------------------------
 
 function persist() {
@@ -623,17 +651,30 @@ function showToast(message, type) {
 // ---------------------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', () => {
-  $app = document.getElementById('app');
+  $app         = document.getElementById('app');
   $addGroupBtn = document.getElementById('add-group-btn');
+  $editBtn     = document.getElementById('edit-btn');
+  $importBtn   = document.getElementById('import-btn');
+  $exportBtn   = document.getElementById('export-btn');
+
+  // All edit controls start hidden
   $addGroupBtn.hidden = true;
+  $importBtn.hidden   = true;
+  $exportBtn.hidden   = true;
 
   document.addEventListener('keydown', e => {
-    if (e.key === 'e' || e.key === 'E') {
-      if (!e.target.closest('input, textarea, [contenteditable]')) {
+    // Issue #8 fix: guard modifier keys and focused interactive elements
+    if ((e.key === 'e' || e.key === 'E') && !e.metaKey && !e.ctrlKey && !e.altKey) {
+      const tag = document.activeElement?.tagName;
+      if (!['INPUT', 'TEXTAREA', 'A', 'BUTTON', 'SELECT'].includes(tag)
+          && !document.activeElement?.closest('[contenteditable]')) {
         toggleEditMode();
       }
     }
+    // Issue #5 fix: do not exit edit mode via Escape if a rename input is active;
+    // let startRename()'s own keydown handler consume the event first.
     if (e.key === 'Escape' && editMode) {
+      if (document.querySelector('.rename-input')) return;
       toggleEditMode();
     }
   });

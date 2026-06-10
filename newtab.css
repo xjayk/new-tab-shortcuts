@@ -129,11 +129,16 @@
 }
 .group-name:hover { color: var(--text); background: var(--surface-2); }
 
+/* Issue #7 fix: restore hover-reveal transition for .group-actions,
+   consistent with .tile-menu-btn which also uses opacity reveal. */
 .group-actions {
   display: flex;
   align-items: center;
   gap: .25rem;
+  opacity: 0;
+  transition: opacity .15s;
 }
+.group:hover .group-actions { opacity: 1; }
 
 .rename-input {
   font-size: .78rem;
