@@ -191,7 +191,7 @@
 .tile-icon {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -204,7 +204,7 @@
 .tile-favicon {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: 50%;
   object-fit: contain;
 }
 
