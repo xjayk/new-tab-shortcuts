@@ -50,7 +50,7 @@ const debouncedSave = debounce(saveAll, 400);
 // Self-write guard — skip onChange echo from our own writes (Issue #4)
 // ---------------------------------------------------------------------------
 
-let _lastWrittenStateStr = '';
+const writtenStates = new Set();
 
 // ---------------------------------------------------------------------------
 // Render — uses cached $app (Issue #3)
