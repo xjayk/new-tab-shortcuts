@@ -53,6 +53,12 @@ const debouncedSave = debounce(saveAll, 400);
 const writtenStates = new Set();
 
 // ---------------------------------------------------------------------------
+// Edit mode — all edit controls hidden by default
+// ---------------------------------------------------------------------------
+
+let editMode = false;
+
+// ---------------------------------------------------------------------------
 // Render — uses cached $app (Issue #3)
 // ---------------------------------------------------------------------------
 
@@ -158,20 +164,26 @@ function renderGroups(root) {
 
 function groupHTML(group) {
   const tiles = group.shortcuts.map(s => tileHTML(s, group.id)).join('');
+  const actions = editMode
+    ? `<div class="group-actions">
+        <button class="icon-btn" title="Add shortcut" data-action="add-shortcut" data-group-id="${group.id}">+</button>
+        <button class="icon-btn danger" title="Delete group" data-action="delete-group" data-group-id="${group.id}">✕</button>
+      </div>`
+    : '';
+  const addTile = editMode
+    ? `<button class="tile tile-add" data-action="add-shortcut" data-group-id="${group.id}" title="Add shortcut">
+        <span class="tile-add-icon">+</span>
+      </button>`
+    : '';
   return `
     <section class="group" data-group-id="${group.id}">
       <header class="group-header">
         <span class="group-name" data-action="rename-group" data-group-id="${group.id}">${escHtml(group.name)}</span>
-        <div class="group-actions">
-          <button class="icon-btn" title="Add shortcut" data-action="add-shortcut" data-group-id="${group.id}">+</button>
-          <button class="icon-btn danger" title="Delete group" data-action="delete-group" data-group-id="${group.id}">✕</button>
-        </div>
+        ${actions}
       </header>
       <div class="tiles">
         ${tiles}
-        <button class="tile tile-add" data-action="add-shortcut" data-group-id="${group.id}" title="Add shortcut">
-          <span class="tile-add-icon">+</span>
-        </button>
+        ${addTile}
       </div>
     </section>`;
 }
@@ -186,6 +198,18 @@ function tileHTML(shortcut, groupId) {
   const color = ACCENT_COLORS[colorIndex];
   const domain = domainFromUrl(shortcut.url);
   const faviconUrl = `https://www.google.com/s2/favicons?domain=${escAttr(domain)}&sz=64`;
+  const menu = editMode
+    ? `<span class="tile-menu">
+        <button class="tile-menu-btn" data-action="tile-menu" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"
+                title="More" tabindex="-1">⋮</button>
+        <div class="tile-dropdown">
+          <button class="tile-dropdown-item" data-action="duplicate-shortcut"
+                  data-shortcut-id="${shortcut.id}" data-group-id="${groupId}">Duplicate</button>
+          <button class="tile-dropdown-item danger" data-action="delete-shortcut"
+                  data-shortcut-id="${shortcut.id}" data-group-id="${groupId}">Delete</button>
+        </div>
+      </span>`
+    : '';
   return `
     <a class="tile" href="${escAttr(shortcut.url)}" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}">
       <span class="tile-icon">
@@ -194,9 +218,7 @@ function tileHTML(shortcut, groupId) {
         <span class="tile-fallback" style="background:${color}">${escHtml(initial)}</span>
       </span>
       <span class="tile-name">${escHtml(shortcut.name)}</span>
-      <button class="tile-delete icon-btn danger" data-action="delete-shortcut"
-              data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"
-              title="Remove shortcut" tabindex="-1">✕</button>
+      ${menu}
     </a>`;
 }
 
@@ -217,12 +239,16 @@ function handleClick(e) {
   const groupId    = btn.dataset.groupId;
   const shortcutId = btn.dataset.shortcutId;
 
+  const editActions = ['add-shortcut', 'delete-shortcut', 'delete-group', 'rename-group', 'tile-menu', 'duplicate-shortcut'];
+  if (editActions.includes(action) && !editMode) return;
+
   if (action === 'add-shortcut') {
     e.preventDefault();
     openAddModal(groupId);
   } else if (action === 'delete-shortcut') {
     e.preventDefault();
     e.stopPropagation();
+    closeAllTileMenus();
     deleteShortcut(groupId, shortcutId);
   } else if (action === 'delete-group') {
     e.preventDefault();
@@ -230,6 +256,15 @@ function handleClick(e) {
   } else if (action === 'rename-group') {
     e.preventDefault();
     startRename(btn, groupId);
+  } else if (action === 'tile-menu') {
+    e.preventDefault();
+    e.stopPropagation();
+    toggleTileMenu(btn);
+  } else if (action === 'duplicate-shortcut') {
+    e.preventDefault();
+    e.stopPropagation();
+    closeAllTileMenus();
+    duplicateShortcut(groupId, shortcutId);
   }
 }
 
@@ -237,7 +272,16 @@ function handleClick(e) {
 // Toolbar — uses cached $addGroupBtn (Issue #3)
 // ---------------------------------------------------------------------------
 
+function toggleEditMode() {
+  editMode = !editMode;
+  document.getElementById('edit-btn').classList.toggle('active', editMode);
+  $addGroupBtn.hidden = !editMode;
+  closeAllTileMenus();
+  render();
+}
+
 function initToolbar() {
+  document.getElementById('edit-btn').addEventListener('click', toggleEditMode);
   $addGroupBtn.addEventListener('click', () => promptAddGroup());
   document.getElementById('export-btn').addEventListener('click', exportState);
   document.getElementById('import-btn').addEventListener('click', triggerImport);
@@ -394,6 +438,50 @@ function deleteShortcut(groupId, shortcutId) {
   persist();
 }
 
+function duplicateShortcut(groupId, shortcutId) {
+  const group = state.groups.find(g => g.id === groupId);
+  if (!group) return;
+  const idx = group.shortcuts.findIndex(s => s.id === shortcutId);
+  if (idx === -1) return;
+  const original = group.shortcuts[idx];
+  const copy = { ...original, id: newId() };
+  const newShortcuts = [...group.shortcuts];
+  newShortcuts.splice(idx + 1, 0, copy);
+  state = {
+    ...state,
+    groups: state.groups.map(g =>
+      g.id === groupId ? { ...g, shortcuts: newShortcuts } : g
+    ),
+  };
+  persist();
+}
+
+function toggleTileMenu(btn) {
+  const open = document.querySelector('.tile-dropdown.open');
+  if (open && open.closest('.tile-menu').contains(btn)) {
+    open.classList.remove('open');
+    document.removeEventListener('click', closeOnOutsideClick);
+    return;
+  }
+  closeAllTileMenus();
+  const dropdown = btn.parentElement.querySelector('.tile-dropdown');
+  if (dropdown) {
+    dropdown.classList.add('open');
+    setTimeout(() => document.addEventListener('click', closeOnOutsideClick), 0);
+  }
+}
+
+function closeAllTileMenus() {
+  document.querySelectorAll('.tile-dropdown.open').forEach(d => d.classList.remove('open'));
+  document.removeEventListener('click', closeOnOutsideClick);
+}
+
+function closeOnOutsideClick(e) {
+  if (!e.target.closest('.tile-menu')) {
+    closeAllTileMenus();
+  }
+}
+
 function closeModal() {
   const modalToClose = $modal;
   if (!modalToClose) return;
@@ -535,6 +623,18 @@ function showToast(message, type) {
 document.addEventListener('DOMContentLoaded', () => {
   $app = document.getElementById('app');
   $addGroupBtn = document.getElementById('add-group-btn');
+  $addGroupBtn.hidden = true;
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'e' || e.key === 'E') {
+      if (!e.target.closest('input, textarea, [contenteditable]')) {
+        toggleEditMode();
+      }
+    }
+    if (e.key === 'Escape' && editMode) {
+      toggleEditMode();
+    }
+  });
 
   initToolbar();
   initEventDelegation();

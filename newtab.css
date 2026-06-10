@@ -73,6 +73,8 @@
   border: 1px solid var(--border);
 }
 .btn-sm:hover { background: var(--border); }
+.btn-sm.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-sm.active:hover { background: var(--accent-hover); }
 
 .toolbar-actions {
   display: flex;
@@ -131,10 +133,7 @@
   display: flex;
   align-items: center;
   gap: .25rem;
-  opacity: 0;
-  transition: opacity .15s;
 }
-.group:hover .group-actions { opacity: 1; }
 
 .rename-input {
   font-size: .78rem;
@@ -231,19 +230,63 @@
 }
 .tile:hover .tile-name { color: var(--text); }
 
-/* Delete button — appears on hover */
-.tile-delete {
+/* Three-dot menu — appears on hover in edit mode */
+.tile-menu {
   position: absolute;
   top: 4px;
   right: 4px;
-  width: 20px;
-  height: 20px;
-  font-size: .65rem;
-  opacity: 0;
-  transition: opacity .15s, background .15s, color .15s;
-  z-index: 1;
+  z-index: 2;
 }
-.tile:hover .tile-delete { opacity: 1; }
+.tile-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-size: .9rem;
+  cursor: pointer;
+  transition: background .15s, color .15s;
+  opacity: 0;
+}
+.tile:hover .tile-menu-btn { opacity: 1; }
+.tile-menu-btn:hover { background: var(--surface-2); color: var(--text); }
+.tile-menu-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+.tile-dropdown {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow);
+  min-width: 110px;
+  padding: .25rem 0;
+  z-index: 10;
+}
+.tile-dropdown.open { display: block; }
+
+.tile-dropdown-item {
+  display: block;
+  width: 100%;
+  padding: .4rem .75rem;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  font-size: .8rem;
+  text-align: left;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background .1s;
+}
+.tile-dropdown-item:hover { background: var(--surface-2); }
+.tile-dropdown-item.danger { color: var(--danger); }
+.tile-dropdown-item.danger:hover { background: rgba(224,90,106,.12); }
 
 /* Add-shortcut tile */
 .tile-add {
