@@ -22,9 +22,10 @@ let syncReady = false;
 
 let $app;
 let $addGroupBtn;
+let $shortcutBtn;
 let $importBtn;
 let $exportBtn;
-let $editCheckbox;   // the <input type="checkbox"> inside the toggle
+let $editCheckbox;
 let $modal = null;
 
 // ---------------------------------------------------------------------------
@@ -68,9 +69,10 @@ let editMode = false;
  */
 function setEditMode(next) {
   editMode = next;
-  $importBtn.hidden   = !editMode;
-  $exportBtn.hidden   = !editMode;
-  $addGroupBtn.hidden = !editMode;
+  $importBtn.hidden    = !editMode;
+  $exportBtn.hidden    = !editMode;
+  $shortcutBtn.hidden  = !editMode;
+  $addGroupBtn.hidden  = !editMode;
   closeAllTileMenus();
   render();
 }
@@ -349,7 +351,7 @@ function initToolbar() {
   });
 
   $addGroupBtn.addEventListener('click', () => promptAddGroup());
-  document.getElementById('add-shortcut-btn').addEventListener('click', () => openAddModal());
+  $shortcutBtn.addEventListener('click', () => openAddModal());
   document.getElementById('export-btn').addEventListener('click', exportState);
   document.getElementById('import-btn').addEventListener('click', triggerImport);
   $exportBtn.addEventListener('click', exportState);
@@ -518,20 +520,30 @@ function deleteShortcut(groupId, shortcutId) {
 }
 
 function duplicateShortcut(groupId, shortcutId) {
-  const group = state.groups.find(g => g.id === groupId);
-  if (!group) return;
-  const idx = group.shortcuts.findIndex(s => s.id === shortcutId);
-  if (idx === -1) return;
-  const original = group.shortcuts[idx];
-  const copy = { ...original, id: newId(), name: `${original.name} (copy)` };
-  const newShortcuts = [...group.shortcuts];
-  newShortcuts.splice(idx + 1, 0, copy);
-  state = {
-    ...state,
-    groups: state.groups.map(g =>
-      g.id === groupId ? { ...g, shortcuts: newShortcuts } : g
-    ),
-  };
+  if (groupId) {
+    const group = state.groups.find(g => g.id === groupId);
+    if (!group) return;
+    const idx = group.shortcuts.findIndex(s => s.id === shortcutId);
+    if (idx === -1) return;
+    const original = group.shortcuts[idx];
+    const copy = { ...original, id: newId(), name: `${original.name} (copy)` };
+    const newShortcuts = [...group.shortcuts];
+    newShortcuts.splice(idx + 1, 0, copy);
+    state = {
+      ...state,
+      groups: state.groups.map(g =>
+        g.id === groupId ? { ...g, shortcuts: newShortcuts } : g
+      ),
+    };
+  } else {
+    const idx = state.shortcuts.findIndex(s => s.id === shortcutId);
+    if (idx === -1) return;
+    const original = state.shortcuts[idx];
+    const copy = { ...original, id: newId(), name: `${original.name} (copy)` };
+    const newShortcuts = [...state.shortcuts];
+    newShortcuts.splice(idx + 1, 0, copy);
+    state = { ...state, shortcuts: newShortcuts };
+  }
   persist();
 }
 
@@ -706,14 +718,16 @@ function showToast(message, type) {
 document.addEventListener('DOMContentLoaded', () => {
   $app          = document.getElementById('app');
   $addGroupBtn  = document.getElementById('add-group-btn');
+  $shortcutBtn  = document.getElementById('add-shortcut-btn');
   $importBtn    = document.getElementById('import-btn');
   $exportBtn    = document.getElementById('export-btn');
   $editCheckbox = document.getElementById('edit-checkbox');
 
   // Ensure all edit-only controls start hidden (belt + suspenders with HTML hidden attr)
-  $addGroupBtn.hidden = true;
-  $importBtn.hidden   = true;
-  $exportBtn.hidden   = true;
+  $addGroupBtn.hidden  = true;
+  $shortcutBtn.hidden  = true;
+  $importBtn.hidden    = true;
+  $exportBtn.hidden    = true;
   $editCheckbox.checked = false;
 
   document.addEventListener('keydown', e => {
