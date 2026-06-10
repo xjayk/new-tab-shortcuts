@@ -10,9 +10,7 @@ test.describe('New Tab Shortcuts Extension', () => {
   let page;
 
   test.beforeEach(async ({ browser }) => {
-    context = await browser.newContext({
-      permissions: ['storage'],
-    });
+    context = await browser.newContext();
     page = await context.newPage();
   });
 
