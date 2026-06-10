@@ -14,33 +14,58 @@ import { init, saveAll, onChange, newId, validate } from './storage.js';
 
 let state = { version: 1, groups: [] };
 
-/**
- * syncReady = true once it is safe to show real content.
- *
- * On a device with a populated local cache, we flip it immediately so
- * returning users see their shortcuts without any delay.
- * On a fresh device (empty local cache), we keep it false until the
- * chrome.storage.sync round-trip completes, showing a skeleton instead
- * of a misleading empty state.
- */
 let syncReady = false;
 
 // ---------------------------------------------------------------------------
-// Render
+// Cached DOM references — resolved once at boot (Issue #3)
+// ---------------------------------------------------------------------------
+
+let $app;
+let $addGroupBtn;
+let $modal = null;
+
+// ---------------------------------------------------------------------------
+// Debounce utility (Issue #1)
+// ---------------------------------------------------------------------------
+
+function debounce(fn, ms) {
+  let timer;
+  let lastArgs;
+  const debounced = (...args) => {
+    lastArgs = args;
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...lastArgs), ms);
+  };
+  debounced.cancel = () => { clearTimeout(timer); timer = null; };
+  debounced.flush = (...args) => {
+    clearTimeout(timer);
+    fn(...args);
+  };
+  return debounced;
+}
+
+const debouncedSave = debounce(saveAll, 400);
+
+// ---------------------------------------------------------------------------
+// Self-write guard — skip onChange echo from our own writes (Issue #4)
+// ---------------------------------------------------------------------------
+
+let _lastWrittenStateStr = '';
+
+// ---------------------------------------------------------------------------
+// Render — uses cached $app (Issue #3)
 // ---------------------------------------------------------------------------
 
 function render() {
-  const root = document.getElementById('app');
-
   if (!syncReady) {
-    renderSkeleton(root);
+    renderSkeleton($app);
     return;
   }
 
   if (state.groups.length === 0) {
-    renderEmpty(root);
+    renderEmpty($app);
   } else {
-    renderGroups(root);
+    renderGroups($app);
   }
 }
 
@@ -75,10 +100,60 @@ function renderEmpty(root) {
   document.getElementById('empty-add-group').addEventListener('click', () => promptAddGroup());
 }
 
+// ---------------------------------------------------------------------------
+// Surgical DOM patching via data-group-id (Issue #2)
+// ---------------------------------------------------------------------------
+
 function renderGroups(root) {
-  // Only update innerHTML — the delegated click listener lives on #app
-  // and is attached once at boot, so it survives innerHTML replacement.
-  root.innerHTML = state.groups.map(group => groupHTML(group)).join('');
+  const existingEls = new Map();
+  for (const child of [...root.children]) {
+    const gid = child.dataset?.groupId;
+    if (gid) {
+      existingEls.set(gid, child);
+    } else {
+      child.remove();
+    }
+  }
+
+  const activeIds = new Set(state.groups.map(g => g.id));
+  for (const [gid, child] of existingEls) {
+    if (!activeIds.has(gid)) {
+      child.remove();
+      existingEls.delete(gid);
+    }
+  }
+
+  state.groups.forEach((group, index) => {
+    const newHtml = groupHTML(group);
+    const existingChild = existingEls.get(group.id);
+
+    if (existingChild) {
+      const groupStateStr = JSON.stringify(group);
+      if (existingChild._groupState !== groupStateStr) {
+        const temp = document.createElement('div');
+        temp.innerHTML = newHtml;
+        const newChild = temp.firstElementChild;
+        newChild._groupState = groupStateStr;
+        existingChild.replaceWith(newChild);
+        existingEls.set(group.id, newChild);
+      }
+
+      const updatedChild = existingEls.get(group.id);
+      const currentChildAtIndex = root.children[index];
+      if (currentChildAtIndex !== updatedChild) {
+        root.insertBefore(updatedChild, currentChildAtIndex || null);
+      }
+    } else {
+      const temp = document.createElement('div');
+      temp.innerHTML = newHtml;
+      const newChild = temp.firstElementChild;
+      newChild._groupState = JSON.stringify(group);
+
+      const currentChildAtIndex = root.children[index];
+      root.insertBefore(newChild, currentChildAtIndex || null);
+      existingEls.set(group.id, newChild);
+    }
+  });
 }
 
 function groupHTML(group) {
@@ -121,8 +196,7 @@ function tileHTML(shortcut, groupId) {
 // ---------------------------------------------------------------------------
 
 function initEventDelegation() {
-  const root = document.getElementById('app');
-  root.addEventListener('click', handleClick);
+  $app.addEventListener('click', handleClick);
 }
 
 function handleClick(e) {
@@ -150,10 +224,11 @@ function handleClick(e) {
 }
 
 // ---------------------------------------------------------------------------
-// Toolbar
+// Toolbar — uses cached $addGroupBtn (Issue #3)
 // ---------------------------------------------------------------------------
 
 function initToolbar() {
+// TODO: Fix! Broken as a result of a merge conflict resolution <<<<<<< feat/import-export-shortcuts
   document.getElementById('add-group-btn').addEventListener('click', () => promptAddGroup());
   document.getElementById('export-btn').addEventListener('click', exportState);
   document.getElementById('import-btn').addEventListener('click', triggerImport);
@@ -165,6 +240,9 @@ function initToolbar() {
   fileInput.id = 'import-file-input';
   fileInput.addEventListener('change', handleImportFile);
   document.body.appendChild(fileInput);
+// TODO: Fix! Broken as a result of a merge conflict resolution =======
+  $addGroupBtn.addEventListener('click', () => promptAddGroup());
+// TODO: Fix! Broken as a result of a merge conflict resolution >>>>>>> trunk
 }
 
 // ---------------------------------------------------------------------------
@@ -223,20 +301,19 @@ function startRename(el, groupId) {
 }
 
 // ---------------------------------------------------------------------------
-// Shortcut operations
+// Shortcut operations — uses cached $modal (Issue #3)
 // ---------------------------------------------------------------------------
 
 function openAddModal(groupId) {
-  const existing = document.getElementById('shortcut-modal');
-  if (existing) existing.remove();
+  if ($modal) $modal.remove();
 
   const group = state.groups.find(g => g.id === groupId);
   if (!group) return;
 
-  const modal = document.createElement('div');
-  modal.id = 'shortcut-modal';
-  modal.className = 'modal-overlay';
-  modal.innerHTML = `
+  $modal = document.createElement('div');
+  $modal.id = 'shortcut-modal';
+  $modal.className = 'modal-overlay';
+  $modal.innerHTML = `
     <div class="modal" role="dialog" aria-modal="true" aria-label="Add shortcut">
       <h2 class="modal-title">Add shortcut</h2>
       <label class="field-label" for="sc-name">Name</label>
@@ -250,7 +327,7 @@ function openAddModal(groupId) {
       </div>
     </div>`;
 
-  document.body.appendChild(modal);
+  document.body.appendChild($modal);
 
   const nameInput = document.getElementById('sc-name');
   const urlInput  = document.getElementById('sc-url');
@@ -258,7 +335,7 @@ function openAddModal(groupId) {
   nameInput.focus();
 
   document.getElementById('sc-cancel').addEventListener('click', closeModal);
-  modal.addEventListener('click', e => { if (e.target === modal) closeModal(); });
+  $modal.addEventListener('click', e => { if (e.target === $modal) closeModal(); });
   document.getElementById('sc-save').addEventListener('click', () => saveShortcut(groupId, nameInput, urlInput, errEl));
 
   [nameInput, urlInput].forEach(el => {
@@ -276,7 +353,6 @@ function saveShortcut(groupId, nameInput, urlInput, errEl) {
 
   if (!url) { errEl.textContent = 'URL is required.'; urlInput.focus(); return; }
 
-  // Auto-prepend https:// if no protocol given
   if (!/^[a-zA-Z][a-zA-Z\d+\-.]*:\/\//.test(url)) {
     url = 'https://' + url;
   }
@@ -313,20 +389,34 @@ function deleteShortcut(groupId, shortcutId) {
 }
 
 function closeModal() {
-  const modal = document.getElementById('shortcut-modal');
-  if (modal) {
-    modal.classList.add('modal-closing');
-    modal.addEventListener('animationend', () => modal.remove(), { once: true });
+  if ($modal) {
+    $modal.classList.add('modal-closing');
+    const cleanup = () => {
+      if ($modal) {
+        $modal.remove();
+        $modal = null;
+      }
+    };
+    const styles = window.getComputedStyle($modal);
+    const hasAnimation = styles.animationName
+      && styles.animationName !== 'none'
+      && styles.animationDuration !== '0s';
+    if (hasAnimation) {
+      $modal.addEventListener('animationend', cleanup, { once: true });
+    } else {
+      cleanup();
+    }
   }
 }
 
 // ---------------------------------------------------------------------------
-// Persistence
+// Persistence — debounced saveAll + self-write timestamp (Issues #1, #4)
 // ---------------------------------------------------------------------------
 
-async function persist() {
+function persist() {
   render();
-  await saveAll(state);
+  _lastWrittenStateStr = JSON.stringify(state);
+  debouncedSave(state);
 }
 
 // ---------------------------------------------------------------------------
@@ -425,26 +515,22 @@ function showToast(message, type) {
 // ---------------------------------------------------------------------------
 
 document.addEventListener('DOMContentLoaded', () => {
+  $app = document.getElementById('app');
+  $addGroupBtn = document.getElementById('add-group-btn');
+
   initToolbar();
-  initEventDelegation(); // one listener, attached once, never re-added
-  render();              // renders skeleton immediately (syncReady = false)
+  initEventDelegation();
+  render();
 
   init(
-    // ── Local cache callback (instant) ───────────────────────────────────
-    // Only flip syncReady if local storage already has data.
-    // On a fresh device (empty cache), keep showing skeleton so the user
-    // never sees a misleading empty state before sync resolves.
     localState => {
       state = localState;
       if (localState.groups.length > 0) {
         syncReady = true;
         render();
       }
-      // else: stay in skeleton mode until sync callback fires below
     },
 
-    // ── Sync callback (cross-device, arrives after ~100–500 ms) ──────────
-    // Always set syncReady here — this is the authoritative data source.
     syncState => {
       state = syncState;
       syncReady = true;
@@ -452,9 +538,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   );
 
-  // Live updates while this tab is open (another device wrote)
   onChange(syncState => {
+    const syncStateStr = JSON.stringify(syncState);
+    if (syncStateStr === _lastWrittenStateStr) return;
+    debouncedSave.cancel();
     state = syncState;
+    _lastWrittenStateStr = syncStateStr;
     render();
   });
 });
