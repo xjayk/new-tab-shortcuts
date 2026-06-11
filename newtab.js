@@ -291,6 +291,15 @@ function loadTileFavicons(root) {
 }
 
 function loadFaviconForEl(imgEl, domain) {
+  // Malformed URLs produce an empty domain via domainFromUrl(); skip the
+  // probe entirely and go straight to the letter fallback.
+  if (!domain) {
+    _faviconCache.set('', null);
+    imgEl.style.display = 'none';
+    imgEl.parentElement?.classList.add('tile-icon--fallback');
+    return;
+  }
+
   if (_faviconCache.has(domain)) {
     const url = _faviconCache.get(domain);
     if (url) {
