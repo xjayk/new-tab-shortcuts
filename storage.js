@@ -55,9 +55,9 @@ function validate(raw) {
   return { version: SCHEMA_VERSION, groups, shortcuts };
 }
 
-/** Generate a short unique ID */
+/** Generate a unique ID using crypto.randomUUID */
 function uid() {
-  return Math.random().toString(36).slice(2, 10);
+  return crypto.randomUUID();
 }
 
 /**
@@ -152,7 +152,7 @@ function onChange(callback) {
 
 /** Generate a new UID (exported for use in newtab.js) */
 function newId() {
-  return uid();
+  return crypto.randomUUID();
 }
 
 // ---------------------------------------------------------------------------

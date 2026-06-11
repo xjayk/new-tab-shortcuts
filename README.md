@@ -5,6 +5,12 @@ A fast, minimal Chrome "New Tab" override with grouped shortcuts that sync autom
 ## Features
 
 - **Grouped shortcuts** — Organize bookmarks into named sections
+- **Ungrouped shortcuts** — Add shortcuts without creating a group
+- **Edit mode** — Toggle with the switch in the toolbar, or press `E` on your keyboard
+- **Tile menu** — Edit, duplicate, or delete shortcuts from the `⋮` menu
+- **Favicons** — Loaded from Chrome's built-in cache; no external requests
+- **Background image** — Set a custom background image with size controls
+- **Import / Export** — JSON backup and restore of all shortcuts and groups
 - **Instant load** — Renders from local cache before sync resolves; no blank-page flash
 - **Cross-device sync** — Uses Chrome's built-in sync storage (same Chrome account = same shortcuts everywhere)
 - **Zero dependencies** — Pure HTML, CSS, and vanilla JS. No build step, no npm, no bundler.
@@ -23,11 +29,18 @@ That's it. No build step required.
 
 | Action | How |
 |---|---|
-| Add a group | Click **"+ New group"** in the toolbar (or the button on the empty state) |
+| Toggle edit mode | Click the **Edit** pill in the toolbar, or press `E` |
+| Exit edit mode | Click the active Edit pill, or press `Escape` |
+| Add a group | Enable edit mode → click **+ group** in the toolbar |
 | Rename a group | Click the group's name label |
-| Delete a group | Hover the group → click **✕** next to the group name |
-| Add a shortcut | Click **+** next to a group header, or the dashed **+** tile inside a group |
-| Delete a shortcut | Hover a shortcut tile → click the **✕** that appears |
+| Delete a group | Enable edit mode → click **✕** next to the group name |
+| Add a shortcut | Enable edit mode → click **+** next to a group header, or the dashed **+** tile |
+| Edit a shortcut | Enable edit mode → hover a tile → click **⋮** → **Edit** |
+| Duplicate a shortcut | Enable edit mode → hover a tile → click **⋮** → **Duplicate** |
+| Delete a shortcut | Enable edit mode → hover a tile → click **⋮** → **Delete** |
+| Import shortcuts | Enable edit mode → click **import** |
+| Export shortcuts | Enable edit mode → click **export** |
+| Set background image | Enable edit mode → click **+ background** |
 
 ## How Sync Works
 
@@ -42,20 +55,40 @@ Data is stored in two places simultaneously:
 
 **Storage limits:** `chrome.storage.sync` allows up to 100 KB of data and 512 items. This is more than enough for hundreds of shortcuts.
 
+## Keyboard Shortcuts
+
+| Key | Action |
+|---|---|
+| `E` | Toggle edit mode on/off |
+| `Escape` | Exit edit mode |
+
+## Privacy
+
+- **Favicons** are loaded via Chrome's built-in `chrome://favicon` API. No domain data is sent to any external service.
+- **No data collection.** This extension does not collect, transmit, or store any user data on external servers.
+- All data stays in your Chrome profile and syncs only through your Chrome account.
+
 ## File Structure
 
 ```
-├── manifest.json     ← Chrome extension manifest (MV3)
-├── newtab.html       ← New tab page entry point (inline critical CSS)
-├── newtab.css        ← Full stylesheet (loaded non-blocking)
-├── newtab.js         ← UI rendering and event handling (ES module)
-├── storage.js        ← Dual-layer storage abstraction
+├── manifest.json       ← Chrome extension manifest (MV3)
+├── newtab.html         ← New tab page entry point (inline critical CSS)
+├── newtab.css          ← Full stylesheet (loaded non-blocking)
+├── newtab.js           ← UI rendering and event handling (ES module)
+├── storage.js          ← Dual-layer storage abstraction
 ├── icons/
 │   ├── icon16.png
 │   ├── icon48.png
 │   └── icon128.png
+├── tests/
+│   ├── storage.test.js
+│   └── integration/
+│       └── extension.spec.js
+├── eslint.config.js
+├── playwright.config.js
+├── vitest.config.js
 ├── README.md
-├── AGENT.md          ← AI coding agent context
+├── AGENT.md
 └── package.json
 ```
 

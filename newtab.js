@@ -291,9 +291,6 @@ function loadTileFavicons(root) {
 }
 
 function loadFaviconForEl(imgEl, domain) {
-  const googleUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
-  const ddgUrl = `https://icons.duckduckgo.com/ip3/${domain}.ico`;
-
   if (_faviconCache.has(domain)) {
     const url = _faviconCache.get(domain);
     if (url) {
@@ -305,31 +302,9 @@ function loadFaviconForEl(imgEl, domain) {
     return;
   }
 
-  const tryDdg = () => {
-    const probe = new Image();
-    probe.onload = () => {
-      _faviconCache.set(domain, ddgUrl);
-      imgEl.src = ddgUrl;
-    };
-    probe.onerror = () => {
-      _faviconCache.set(domain, null);
-      imgEl.style.display = 'none';
-      imgEl.parentElement.classList.add('tile-icon--fallback');
-    };
-    probe.src = ddgUrl;
-  };
-
-  const probe = new Image();
-  probe.onload = () => {
-    if (probe.naturalWidth <= 16) {
-      tryDdg();
-    } else {
-      _faviconCache.set(domain, googleUrl);
-      imgEl.src = googleUrl;
-    }
-  };
-  probe.onerror = tryDdg;
-  probe.src = googleUrl;
+  const url = `chrome://favicon/size/64@1x/https://${domain}/`;
+  _faviconCache.set(domain, url);
+  imgEl.src = url;
 }
 
 function tileHTML(shortcut, groupId) {
@@ -781,7 +756,9 @@ function escHtml(str) {
     .replace(/"/g, '&quot;');
 }
 
-function escAttr(str) { return escHtml(str); }
+function escAttr(str) {
+  return escHtml(str).replace(/'/g, '&#39;');
+}
 
 function hashStr(str) {
   let h = 0;
