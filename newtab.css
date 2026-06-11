@@ -566,13 +566,13 @@
 
 .bg-size-select {
   padding: .3rem .4rem;
-  background: var(--surface-2);
-  color: var(--text);
-  border: 1px solid var(--border);
+  background: rgba(45,179,125,.12);
+  color: #2db37d;
+  border: 1px solid rgba(45,179,125,.25);
   border-radius: var(--radius-sm);
   font-size: .78rem;
   cursor: pointer;
   outline: none;
 }
 .bg-size-select:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
-.bg-size-select:hover { background: var(--border); }
+.bg-size-select:hover { background: rgba(45,179,125,.22); }
