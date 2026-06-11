@@ -11,7 +11,7 @@
     "favicon"
   ],
   "content_security_policy": {
-    "extension_pages": "script-src 'self'; object-src 'none'; img-src 'self' chrome://favicon;"
+    "extension_pages": "script-src 'self'; object-src 'none'"
   },
   "icons": {
     "16":  "icons/icon16.png",

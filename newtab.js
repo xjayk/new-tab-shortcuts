@@ -297,14 +297,23 @@ function loadFaviconForEl(imgEl, domain) {
       imgEl.src = url;
     } else {
       imgEl.style.display = 'none';
-      imgEl.parentElement.classList.add('tile-icon--fallback');
+      imgEl.parentElement?.classList.add('tile-icon--fallback');
     }
     return;
   }
 
   const url = `chrome://favicon/size/64@1x/https://${domain}/`;
-  _faviconCache.set(domain, url);
-  imgEl.src = url;
+  const probe = new Image();
+  probe.onload = () => {
+    _faviconCache.set(domain, url);
+    imgEl.src = url;
+  };
+  probe.onerror = () => {
+    _faviconCache.set(domain, null);
+    imgEl.style.display = 'none';
+    imgEl.parentElement?.classList.add('tile-icon--fallback');
+  };
+  probe.src = url;
 }
 
 function tileHTML(shortcut, groupId) {
@@ -753,7 +762,8 @@ function escHtml(str) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/`/g, '&#96;');
 }
 
 function escAttr(str) {
