@@ -187,6 +187,11 @@
   gap: .5rem;
 }
 
+.group.ungrouped {
+  margin-top: 4rem;
+  margin-bottom: 0;
+}
+
 .group-name {
   font-size: .78rem;
   font-weight: 700;

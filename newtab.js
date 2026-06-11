@@ -12,7 +12,7 @@ import { init, saveAll, onChange, newId, validate } from './storage.js';
 // State
 // ---------------------------------------------------------------------------
 
-let state = { version: 1, groups: [] };
+let state = { version: 1, groups: [], shortcuts: [] };
 
 let syncReady = false;
 
@@ -22,9 +22,10 @@ let syncReady = false;
 
 let $app;
 let $addGroupBtn;
+let $shortcutBtn;
 let $importBtn;
 let $exportBtn;
-let $editCheckbox;   // the <input type="checkbox"> inside the toggle
+let $editCheckbox;
 let $modal = null;
 
 // ---------------------------------------------------------------------------
@@ -68,9 +69,10 @@ let editMode = false;
  */
 function setEditMode(next) {
   editMode = next;
-  $importBtn.hidden   = !editMode;
-  $exportBtn.hidden   = !editMode;
-  $addGroupBtn.hidden = !editMode;
+  $importBtn.hidden    = !editMode;
+  $exportBtn.hidden    = !editMode;
+  $shortcutBtn.hidden  = !editMode;
+  $addGroupBtn.hidden  = !editMode;
   closeAllTileMenus();
   render();
 }
@@ -98,7 +100,7 @@ function render() {
     return;
   }
 
-  if (state.groups.length === 0) {
+  if (state.groups.length === 0 && state.shortcuts.length === 0) {
     renderEmpty($app);
   } else {
     renderGroups($app);
@@ -141,6 +143,7 @@ function renderEmpty(root) {
 // ---------------------------------------------------------------------------
 
 function renderGroups(root) {
+  const UNGROUPED_ID = '__ungrouped__';
   const existingEls = new Map();
   for (const child of [...root.children]) {
     const gid = child.dataset?.groupId;
@@ -152,6 +155,7 @@ function renderGroups(root) {
   }
 
   const activeIds = new Set(state.groups.map(g => g.id));
+  if (state.shortcuts.length > 0) activeIds.add(UNGROUPED_ID);
   for (const [gid, child] of existingEls) {
     if (!activeIds.has(gid)) {
       child.remove();
@@ -190,6 +194,31 @@ function renderGroups(root) {
       existingEls.set(group.id, newChild);
     }
   });
+
+  if (state.shortcuts.length > 0) {
+    const ungroupedHtml = ungroupedHTML();
+    const existingUngrouped = existingEls.get(UNGROUPED_ID);
+    const ungroupedStateStr = JSON.stringify(state.shortcuts);
+    if (existingUngrouped) {
+      if (existingUngrouped._groupState !== ungroupedStateStr) {
+        const temp = document.createElement('div');
+        temp.innerHTML = ungroupedHtml;
+        const newChild = temp.firstElementChild;
+        newChild._groupState = ungroupedStateStr;
+        existingUngrouped.replaceWith(newChild);
+        existingEls.set(UNGROUPED_ID, newChild);
+      }
+      const updatedChild = existingEls.get(UNGROUPED_ID);
+      root.appendChild(updatedChild);
+    } else {
+      const temp = document.createElement('div');
+      temp.innerHTML = ungroupedHtml;
+      const newChild = temp.firstElementChild;
+      newChild._groupState = ungroupedStateStr;
+      root.appendChild(newChild);
+      existingEls.set(UNGROUPED_ID, newChild);
+    }
+  }
 }
 
 function groupHTML(group) {
@@ -214,6 +243,19 @@ function groupHTML(group) {
       <div class="tiles">
         ${tiles}
         ${addTile}
+      </div>
+    </section>`;
+}
+
+function ungroupedHTML() {
+  const tiles = state.shortcuts.map(s => tileHTML(s, '')).join('');
+  return `
+    <section class="group ungrouped" data-group-id="__ungrouped__">
+      <div class="tiles">
+        ${tiles}
+        <button class="tile tile-add" data-action="add-shortcut" title="Add shortcut">
+          <span class="tile-add-icon">+</span>
+        </button>
       </div>
     </section>`;
 }
@@ -309,6 +351,9 @@ function initToolbar() {
   });
 
   $addGroupBtn.addEventListener('click', () => promptAddGroup());
+  $shortcutBtn.addEventListener('click', () => openAddModal());
+  document.getElementById('export-btn').addEventListener('click', exportState);
+  document.getElementById('import-btn').addEventListener('click', triggerImport);
   $exportBtn.addEventListener('click', exportState);
   $importBtn.addEventListener('click', triggerImport);
 
@@ -337,8 +382,26 @@ function deleteGroup(groupId) {
   const group = state.groups.find(g => g.id === groupId);
   if (!group) return;
   const hasShortcuts = group.shortcuts.length > 0;
-  if (hasShortcuts && !confirm(`Delete group "${group.name}" and its ${group.shortcuts.length} shortcut(s)?`)) return;
-  state = { ...state, groups: state.groups.filter(g => g.id !== groupId) };
+
+  if (hasShortcuts) {
+    const keep = confirm(
+      `Delete group "${group.name}"?\n` +
+      `• OK → move ${group.shortcuts.length} shortcut(s) to ungrouped\n` +
+      `• Cancel → delete group AND its shortcuts`
+    );
+    if (keep) {
+      state = {
+        ...state,
+        shortcuts: [...state.shortcuts, ...group.shortcuts],
+        groups: state.groups.filter(g => g.id !== groupId),
+      };
+    } else {
+      if (!confirm(`Permanently delete "${group.name}" and all ${group.shortcuts.length} shortcuts?`)) return;
+      state = { ...state, groups: state.groups.filter(g => g.id !== groupId) };
+    }
+  } else {
+    state = { ...state, groups: state.groups.filter(g => g.id !== groupId) };
+  }
   persist();
 }
 
@@ -383,8 +446,10 @@ function startRename(el, groupId) {
 function openAddModal(groupId) {
   if ($modal) $modal.remove();
 
-  const group = state.groups.find(g => g.id === groupId);
-  if (!group) return;
+  if (groupId) {
+    const group = state.groups.find(g => g.id === groupId);
+    if (!group) return;
+  }
 
   $modal = document.createElement('div');
   $modal.id = 'shortcut-modal';
@@ -441,44 +506,62 @@ function saveShortcut(groupId, nameInput, urlInput, errEl) {
 
   const shortcut = { id: newId(), name: name || url, url };
 
-  state = {
-    ...state,
-    groups: state.groups.map(g =>
-      g.id === groupId ? { ...g, shortcuts: [...g.shortcuts, shortcut] } : g
-    ),
-  };
+  if (groupId) {
+    state = {
+      ...state,
+      groups: state.groups.map(g =>
+        g.id === groupId ? { ...g, shortcuts: [...g.shortcuts, shortcut] } : g
+      ),
+    };
+  } else {
+    state = { ...state, shortcuts: [...state.shortcuts, shortcut] };
+  }
 
   closeModal();
   persist();
 }
 
 function deleteShortcut(groupId, shortcutId) {
-  state = {
-    ...state,
-    groups: state.groups.map(g =>
-      g.id === groupId
-        ? { ...g, shortcuts: g.shortcuts.filter(s => s.id !== shortcutId) }
-        : g
-    ),
-  };
+  if (groupId) {
+    state = {
+      ...state,
+      groups: state.groups.map(g =>
+        g.id === groupId
+          ? { ...g, shortcuts: g.shortcuts.filter(s => s.id !== shortcutId) }
+          : g
+      ),
+    };
+  } else {
+    state = { ...state, shortcuts: state.shortcuts.filter(s => s.id !== shortcutId) };
+  }
   persist();
 }
 
 function duplicateShortcut(groupId, shortcutId) {
-  const group = state.groups.find(g => g.id === groupId);
-  if (!group) return;
-  const idx = group.shortcuts.findIndex(s => s.id === shortcutId);
-  if (idx === -1) return;
-  const original = group.shortcuts[idx];
-  const copy = { ...original, id: newId(), name: `${original.name} (copy)` };
-  const newShortcuts = [...group.shortcuts];
-  newShortcuts.splice(idx + 1, 0, copy);
-  state = {
-    ...state,
-    groups: state.groups.map(g =>
-      g.id === groupId ? { ...g, shortcuts: newShortcuts } : g
-    ),
-  };
+  if (groupId) {
+    const group = state.groups.find(g => g.id === groupId);
+    if (!group) return;
+    const idx = group.shortcuts.findIndex(s => s.id === shortcutId);
+    if (idx === -1) return;
+    const original = group.shortcuts[idx];
+    const copy = { ...original, id: newId(), name: `${original.name} (copy)` };
+    const newShortcuts = [...group.shortcuts];
+    newShortcuts.splice(idx + 1, 0, copy);
+    state = {
+      ...state,
+      groups: state.groups.map(g =>
+        g.id === groupId ? { ...g, shortcuts: newShortcuts } : g
+      ),
+    };
+  } else {
+    const idx = state.shortcuts.findIndex(s => s.id === shortcutId);
+    if (idx === -1) return;
+    const original = state.shortcuts[idx];
+    const copy = { ...original, id: newId(), name: `${original.name} (copy)` };
+    const newShortcuts = [...state.shortcuts];
+    newShortcuts.splice(idx + 1, 0, copy);
+    state = { ...state, shortcuts: newShortcuts };
+  }
   persist();
 }
 
@@ -653,14 +736,16 @@ function showToast(message, type) {
 document.addEventListener('DOMContentLoaded', () => {
   $app          = document.getElementById('app');
   $addGroupBtn  = document.getElementById('add-group-btn');
+  $shortcutBtn  = document.getElementById('add-shortcut-btn');
   $importBtn    = document.getElementById('import-btn');
   $exportBtn    = document.getElementById('export-btn');
   $editCheckbox = document.getElementById('edit-checkbox');
 
   // Ensure all edit-only controls start hidden (belt + suspenders with HTML hidden attr)
-  $addGroupBtn.hidden = true;
-  $importBtn.hidden   = true;
-  $exportBtn.hidden   = true;
+  $addGroupBtn.hidden  = true;
+  $shortcutBtn.hidden  = true;
+  $importBtn.hidden    = true;
+  $exportBtn.hidden    = true;
   $editCheckbox.checked = false;
 
   document.addEventListener('keydown', e => {
