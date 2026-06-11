@@ -10,6 +10,7 @@
  */
 
 const STORAGE_KEY = 'newtab_data';
+const BACKGROUND_KEY = 'newtab_background';
 const SCHEMA_VERSION = 1;
 
 /** @typedef {{ id: string, name: string, url: string }} Shortcut */
@@ -153,4 +154,41 @@ function newId() {
   return uid();
 }
 
-export { init, saveAll, onChange, newId, validate };
+// ---------------------------------------------------------------------------
+// Background image — stored in local-only to avoid sync quota limits
+// ---------------------------------------------------------------------------
+
+/**
+ * Save a background image data URL to local storage.
+ * @param {string} dataUrl
+ * @returns {Promise<void>}
+ */
+async function saveBackground(dataUrl) {
+  return new Promise(resolve => {
+    chrome.storage.local.set({ [BACKGROUND_KEY]: dataUrl }, resolve);
+  });
+}
+
+/**
+ * Read the background image from local storage.
+ * @returns {Promise<string|null>}
+ */
+async function readBackground() {
+  return new Promise(resolve => {
+    chrome.storage.local.get(BACKGROUND_KEY, result => {
+      resolve(result[BACKGROUND_KEY] ?? null);
+    });
+  });
+}
+
+/**
+ * Remove the background image from local storage.
+ * @returns {Promise<void>}
+ */
+async function clearBackground() {
+  return new Promise(resolve => {
+    chrome.storage.local.remove(BACKGROUND_KEY, resolve);
+  });
+}
+
+export { init, saveAll, onChange, newId, validate, saveBackground, readBackground, clearBackground };

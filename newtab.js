@@ -6,7 +6,7 @@
  * at boot — never re-attached on re-renders, so it can't accumulate.
  */
 
-import { init, saveAll, onChange, newId, validate } from './storage.js';
+import { init, saveAll, onChange, newId, validate, saveBackground, readBackground, clearBackground } from './storage.js';
 
 // ---------------------------------------------------------------------------
 // State
@@ -27,6 +27,9 @@ let $importBtn;
 let $exportBtn;
 let $editCheckbox;
 let $modal = null;
+let $bgBtn;
+let $clearBgBtn;
+let $bgFileInput;
 
 // ---------------------------------------------------------------------------
 // Debounce utility
@@ -73,6 +76,8 @@ function setEditMode(next) {
   $exportBtn.hidden    = !editMode;
   $shortcutBtn.hidden  = !editMode;
   $addGroupBtn.hidden  = !editMode;
+  $bgBtn.hidden        = !editMode;
+  $clearBgBtn.hidden   = !editMode || !document.body.style.getPropertyValue('--bg-img');
   closeAllTileMenus();
   render();
 }
@@ -356,6 +361,8 @@ function initToolbar() {
   document.getElementById('import-btn').addEventListener('click', triggerImport);
   $exportBtn.addEventListener('click', exportState);
   $importBtn.addEventListener('click', triggerImport);
+  $bgBtn.addEventListener('click', triggerBgPicker);
+  $clearBgBtn.addEventListener('click', clearBg);
 
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
@@ -364,6 +371,14 @@ function initToolbar() {
   fileInput.id = 'import-file-input';
   fileInput.addEventListener('change', handleImportFile);
   document.body.appendChild(fileInput);
+
+  $bgFileInput = document.createElement('input');
+  $bgFileInput.type = 'file';
+  $bgFileInput.accept = 'image/*';
+  $bgFileInput.style.display = 'none';
+  $bgFileInput.id = 'bg-file-input';
+  $bgFileInput.addEventListener('change', handleBgFile);
+  document.body.appendChild($bgFileInput);
 }
 
 // ---------------------------------------------------------------------------
@@ -730,6 +745,53 @@ function showToast(message, type) {
 }
 
 // ---------------------------------------------------------------------------
+// Background image
+// ---------------------------------------------------------------------------
+
+function setBackgroundImage(dataUrl) {
+  document.body.style.setProperty('--bg-img', `url("${dataUrl}")`);
+  $clearBgBtn.hidden = !editMode;
+  if (!document.querySelector('.bg-overlay')) {
+    const overlay = document.createElement('div');
+    overlay.className = 'bg-overlay';
+    document.body.prepend(overlay);
+  }
+}
+
+function clearBg() {
+  document.body.style.removeProperty('--bg-img');
+  $clearBgBtn.hidden = true;
+  clearBackground();
+  const overlay = document.querySelector('.bg-overlay');
+  if (overlay) overlay.remove();
+}
+
+function handleBgFile(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    showToast('Please select an image file', 'error');
+    return;
+  }
+  const reader = new FileReader();
+  reader.addEventListener('load', evt => {
+    const dataUrl = evt.target.result;
+    setBackgroundImage(dataUrl);
+    saveBackground(dataUrl);
+    showToast('Background set', 'success');
+  });
+  reader.addEventListener('error', () => {
+    showToast('Could not read image', 'error');
+  });
+  reader.readAsDataURL(file);
+  $bgFileInput.value = '';
+}
+
+function triggerBgPicker() {
+  $bgFileInput.click();
+}
+
+// ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
 
@@ -740,12 +802,16 @@ document.addEventListener('DOMContentLoaded', () => {
   $importBtn    = document.getElementById('import-btn');
   $exportBtn    = document.getElementById('export-btn');
   $editCheckbox = document.getElementById('edit-checkbox');
+  $bgBtn        = document.getElementById('bg-btn');
+  $clearBgBtn   = document.getElementById('clear-bg-btn');
 
   // Ensure all edit-only controls start hidden (belt + suspenders with HTML hidden attr)
   $addGroupBtn.hidden  = true;
   $shortcutBtn.hidden  = true;
   $importBtn.hidden    = true;
   $exportBtn.hidden    = true;
+  $bgBtn.hidden        = true;
+  $clearBgBtn.hidden   = true;
   $editCheckbox.checked = false;
 
   document.addEventListener('keydown', e => {
@@ -791,5 +857,10 @@ document.addEventListener('DOMContentLoaded', () => {
     debouncedSave.cancel();
     state = syncState;
     render();
+  });
+
+  // Load background image from local storage
+  readBackground().then(dataUrl => {
+    if (dataUrl) setBackgroundImage(dataUrl);
   });
 });
