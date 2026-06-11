@@ -537,7 +537,22 @@
 .bg-overlay {
   position: fixed;
   inset: 0;
-  background: rgba(0,0,0,.55);
+  background: rgba(0,0,0,.3);
   pointer-events: none;
   z-index: 0;
 }
+
+/* === Background image size select === */
+
+.bg-size-select {
+  padding: .3rem .4rem;
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: .78rem;
+  cursor: pointer;
+  outline: none;
+}
+.bg-size-select:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.bg-size-select:hover { background: var(--border); }

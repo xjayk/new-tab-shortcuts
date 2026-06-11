@@ -6,7 +6,7 @@
  * at boot — never re-attached on re-renders, so it can't accumulate.
  */
 
-import { init, saveAll, onChange, newId, validate, saveBackground, readBackground, clearBackground } from './storage.js';
+import { init, saveAll, onChange, newId, validate, saveBackground, readBackground, clearBackground, saveBackgroundSize, readBackgroundSize } from './storage.js';
 
 // ---------------------------------------------------------------------------
 // State
@@ -29,6 +29,7 @@ let $editCheckbox;
 let $modal = null;
 let $bgBtn;
 let $clearBgBtn;
+let $bgSizeSelect;
 let $bgFileInput;
 
 // ---------------------------------------------------------------------------
@@ -78,6 +79,7 @@ function setEditMode(next) {
   $addGroupBtn.hidden  = !editMode;
   $bgBtn.hidden        = !editMode;
   $clearBgBtn.hidden   = !editMode || !document.body.style.getPropertyValue('--bg-img');
+  $bgSizeSelect.hidden = !editMode || !document.body.style.getPropertyValue('--bg-img');
   closeAllTileMenus();
   render();
 }
@@ -363,6 +365,7 @@ function initToolbar() {
   $importBtn.addEventListener('click', triggerImport);
   $bgBtn.addEventListener('click', triggerBgPicker);
   $clearBgBtn.addEventListener('click', clearBg);
+  $bgSizeSelect.addEventListener('change', handleBgSizeChange);
 
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
@@ -750,7 +753,8 @@ function showToast(message, type) {
 
 function setBackgroundImage(dataUrl) {
   document.body.style.setProperty('--bg-img', `url("${dataUrl}")`);
-  $clearBgBtn.hidden = !editMode;
+  $clearBgBtn.hidden  = !editMode;
+  $bgSizeSelect.hidden = !editMode;
   if (!document.querySelector('.bg-overlay')) {
     const overlay = document.createElement('div');
     overlay.className = 'bg-overlay';
@@ -758,9 +762,15 @@ function setBackgroundImage(dataUrl) {
   }
 }
 
+function applyBgSize(size) {
+  document.body.style.setProperty('--bg-size', size);
+}
+
 function clearBg() {
   document.body.style.removeProperty('--bg-img');
-  $clearBgBtn.hidden = true;
+  document.body.style.removeProperty('--bg-size');
+  $clearBgBtn.hidden   = true;
+  $bgSizeSelect.hidden = true;
   clearBackground();
   const overlay = document.querySelector('.bg-overlay');
   if (overlay) overlay.remove();
@@ -778,6 +788,9 @@ function handleBgFile(e) {
     const dataUrl = evt.target.result;
     setBackgroundImage(dataUrl);
     saveBackground(dataUrl);
+    const size = $bgSizeSelect.value;
+    applyBgSize(size);
+    saveBackgroundSize(size);
     showToast('Background set', 'success');
   });
   reader.addEventListener('error', () => {
@@ -789,6 +802,12 @@ function handleBgFile(e) {
 
 function triggerBgPicker() {
   $bgFileInput.click();
+}
+
+function handleBgSizeChange() {
+  const size = $bgSizeSelect.value;
+  applyBgSize(size);
+  saveBackgroundSize(size);
 }
 
 // ---------------------------------------------------------------------------
@@ -804,6 +823,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $editCheckbox = document.getElementById('edit-checkbox');
   $bgBtn        = document.getElementById('bg-btn');
   $clearBgBtn   = document.getElementById('clear-bg-btn');
+  $bgSizeSelect = document.getElementById('bg-size');
 
   // Ensure all edit-only controls start hidden (belt + suspenders with HTML hidden attr)
   $addGroupBtn.hidden  = true;
@@ -812,6 +832,7 @@ document.addEventListener('DOMContentLoaded', () => {
   $exportBtn.hidden    = true;
   $bgBtn.hidden        = true;
   $clearBgBtn.hidden   = true;
+  $bgSizeSelect.hidden = true;
   $editCheckbox.checked = false;
 
   document.addEventListener('keydown', e => {
@@ -861,6 +882,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Load background image from local storage
   readBackground().then(dataUrl => {
-    if (dataUrl) setBackgroundImage(dataUrl);
+    if (dataUrl) {
+      setBackgroundImage(dataUrl);
+      readBackgroundSize().then(size => {
+        $bgSizeSelect.value = size;
+        applyBgSize(size);
+      });
+    }
   });
 });

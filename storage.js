@@ -11,6 +11,7 @@
 
 const STORAGE_KEY = 'newtab_data';
 const BACKGROUND_KEY = 'newtab_background';
+const BACKGROUND_SIZE_KEY = 'newtab_background_size';
 const SCHEMA_VERSION = 1;
 
 /** @typedef {{ id: string, name: string, url: string }} Shortcut */
@@ -191,4 +192,32 @@ async function clearBackground() {
   });
 }
 
-export { init, saveAll, onChange, newId, validate, saveBackground, readBackground, clearBackground };
+// ---------------------------------------------------------------------------
+// Background image size — stored in local-only
+// ---------------------------------------------------------------------------
+
+/**
+ * Save the background image size setting to local storage.
+ * @param {'cover'|'contain'|'auto'} size
+ * @returns {Promise<void>}
+ */
+async function saveBackgroundSize(size) {
+  return new Promise(resolve => {
+    chrome.storage.local.set({ [BACKGROUND_SIZE_KEY]: size }, resolve);
+  });
+}
+
+/**
+ * Read the background image size setting from local storage.
+ * @returns {Promise<'cover'|'contain'|'auto'>}
+ */
+async function readBackgroundSize() {
+  return new Promise(resolve => {
+    chrome.storage.local.get(BACKGROUND_SIZE_KEY, result => {
+      const size = result[BACKGROUND_SIZE_KEY];
+      resolve(size === 'contain' || size === 'auto' ? size : 'cover');
+    });
+  });
+}
+
+export { init, saveAll, onChange, newId, validate, saveBackground, readBackground, clearBackground, saveBackgroundSize, readBackgroundSize };

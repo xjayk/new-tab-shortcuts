@@ -126,3 +126,29 @@ describe('background image storage', () => {
     expect(chrome.storage.local.remove).toHaveBeenCalledWith('newtab_background', expect.any(Function));
   });
 });
+
+describe('background size storage', () => {
+  it('saveBackgroundSize stores size in chrome.storage.local', async () => {
+    const { saveBackgroundSize } = await import('../storage.js');
+    chrome.storage.local.set.mockImplementation((obj, cb) => cb && cb());
+    await saveBackgroundSize('contain');
+    expect(chrome.storage.local.set).toHaveBeenCalledWith(
+      { newtab_background_size: 'contain' },
+      expect.any(Function),
+    );
+  });
+
+  it('readBackgroundSize defaults to cover when not stored', async () => {
+    const { readBackgroundSize } = await import('../storage.js');
+    chrome.storage.local.get.mockImplementation((key, cb) => cb({}));
+    const result = await readBackgroundSize();
+    expect(result).toBe('cover');
+  });
+
+  it('readBackgroundSize returns stored size', async () => {
+    const { readBackgroundSize } = await import('../storage.js');
+    chrome.storage.local.get.mockImplementation((key, cb) => cb({ newtab_background_size: 'contain' }));
+    const result = await readBackgroundSize();
+    expect(result).toBe('contain');
+  });
+});

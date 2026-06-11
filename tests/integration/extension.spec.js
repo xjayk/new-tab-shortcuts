@@ -33,6 +33,7 @@ test.describe('New Tab Shortcuts Extension', () => {
     await expect(page.locator('#export-btn')).toHaveText('export');
     await expect(page.locator('#bg-btn')).toHaveText('+ background');
     await expect(page.locator('#clear-bg-btn')).toHaveText('clear bg');
+    await expect(page.locator('#bg-size')).toBeHidden();
 
     // All action buttons are hidden by default (view mode)
     await expect(page.locator('#add-group-btn')).toBeHidden();
