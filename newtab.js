@@ -299,8 +299,9 @@ function tileHTML(shortcut, groupId) {
   return `
     <a class="tile" href="${escAttr(shortcut.url)}" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"${editMode ? ' target="_blank" rel="noopener"' : ''}>
       <span class="tile-icon">
-        <img class="tile-favicon" src="${ddgUrl}" alt=""
-             onerror="if(!this.dataset.f){this.dataset.f='1';this.src='${googleUrl}';}else{this.style.display='none';this.parentElement.classList.add('tile-icon--fallback')}">
+        <img class="tile-favicon" src="${googleUrl}" alt=""
+             onload="var c=parseInt(this.dataset.f||0);if(c===0&&this.naturalWidth<=16){this.dataset.f='1';this.src='${ddgUrl}';}else if(c===1&&this.naturalWidth>=40){this.style.display='none';this.parentElement.classList.add('tile-icon--fallback');}"
+             onerror="var c=parseInt(this.dataset.f||0);if(c===0){this.dataset.f='1';this.src='${ddgUrl}';}else{this.style.display='none';this.parentElement.classList.add('tile-icon--fallback');}">
         <span class="tile-fallback" style="background:${color}">${escHtml(initial)}</span>
       </span>
       <span class="tile-name">${escHtml(shortcut.name)}</span>
