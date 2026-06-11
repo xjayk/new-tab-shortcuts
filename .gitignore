@@ -1,6 +1,6 @@
 .DS_Store
-_*
 node_modules
 coverage
 playwright-report
 test-results
+ARCHIVE/
