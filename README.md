@@ -14,7 +14,6 @@ To run tests:
 ```bash
 pnpm install
 pnpm test          # Vitest unit tests
-pnpm test:e2e      # Playwright integration tests
 ```
 
 ## Features
