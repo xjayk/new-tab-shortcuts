@@ -542,6 +542,26 @@
   z-index: 0;
 }
 
+/* Background toolbar group — green accent to visually separate from edit buttons */
+.toolbar-bg-group {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding-left: .75rem;
+  margin-left: .75rem;
+  border-left: 1px solid var(--border);
+}
+
+.btn-bg {
+  background: rgba(45,179,125,.12);
+  color: #2db37d;
+  border: 1px solid rgba(45,179,125,.25);
+}
+.btn-bg:hover {
+  background: rgba(45,179,125,.22);
+  border-color: #2db37d;
+}
+
 /* === Background image size select === */
 
 .bg-size-select {

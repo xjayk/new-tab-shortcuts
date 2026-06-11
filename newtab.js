@@ -756,7 +756,11 @@ function showToast(message, type) {
 
 function setBackgroundImage(dataUrl) {
   hasBackground = true;
-  document.body.style.setProperty('--bg-img', `url("${dataUrl}")`);
+  document.body.style.backgroundImage = `url("${dataUrl}")`;
+  document.body.style.backgroundSize = 'cover';
+  document.body.style.backgroundPosition = 'center';
+  document.body.style.backgroundRepeat = 'no-repeat';
+  document.body.style.backgroundAttachment = 'fixed';
   $clearBgBtn.hidden  = !editMode;
   $bgSizeSelect.hidden = !editMode;
   if (!document.querySelector('.bg-overlay')) {
@@ -767,13 +771,16 @@ function setBackgroundImage(dataUrl) {
 }
 
 function applyBgSize(size) {
-  document.body.style.setProperty('--bg-size', size);
+  document.body.style.backgroundSize = size;
 }
 
 function clearBg() {
   hasBackground = false;
-  document.body.style.removeProperty('--bg-img');
-  document.body.style.removeProperty('--bg-size');
+  document.body.style.backgroundImage = '';
+  document.body.style.backgroundSize = '';
+  document.body.style.backgroundPosition = '';
+  document.body.style.backgroundRepeat = '';
+  document.body.style.backgroundAttachment = '';
   $clearBgBtn.hidden   = true;
   $bgSizeSelect.hidden = true;
   clearBackground();
