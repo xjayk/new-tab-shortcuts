@@ -260,13 +260,16 @@ function groupHTML(group) {
 
 function ungroupedHTML() {
   const tiles = state.shortcuts.map(s => tileHTML(s, '')).join('');
+  const addTile = editMode
+    ? `<button class="tile tile-add" data-action="add-shortcut" title="Add shortcut">
+        <span class="tile-add-icon">+</span>
+      </button>`
+    : '';
   return `
     <section class="group ungrouped" data-group-id="__ungrouped__">
       <div class="tiles">
         ${tiles}
-        <button class="tile tile-add" data-action="add-shortcut" title="Add shortcut">
-          <span class="tile-add-icon">+</span>
-        </button>
+        ${addTile}
       </div>
     </section>`;
 }
@@ -291,8 +294,6 @@ function loadTileFavicons(root) {
 }
 
 function loadFaviconForEl(imgEl, domain) {
-  // Malformed URLs produce an empty domain via domainFromUrl(); skip the
-  // probe entirely and go straight to the letter fallback.
   if (!domain) {
     _faviconCache.set('', null);
     imgEl.style.display = 'none';
@@ -311,30 +312,30 @@ function loadFaviconForEl(imgEl, domain) {
     return;
   }
 
-  // chrome://favicon never fires onerror for unvisited/uncached domains.
-  // Instead it silently returns a generic grey globe, typically 16x16.
-  // We detect this by checking naturalWidth <= 16 in onload and fall back
-  // to the letter tile in that case. This is the only reliable signal
-  // available without making an external network request.
   const url = `chrome://favicon/size/64@1x/https://${domain}/`;
-  const probe = new Image();
-  probe.onload = () => {
-    if (probe.naturalWidth <= 16) {
-      // Grey globe placeholder — treat as no favicon
+
+  const onload = () => {
+    if (imgEl.naturalWidth <= 16) {
       _faviconCache.set(domain, null);
       imgEl.style.display = 'none';
       imgEl.parentElement?.classList.add('tile-icon--fallback');
     } else {
       _faviconCache.set(domain, url);
-      imgEl.src = url;
     }
+    imgEl.removeEventListener('load', onload);
+    imgEl.removeEventListener('error', onerror);
   };
-  probe.onerror = () => {
+  const onerror = () => {
     _faviconCache.set(domain, null);
     imgEl.style.display = 'none';
     imgEl.parentElement?.classList.add('tile-icon--fallback');
+    imgEl.removeEventListener('load', onload);
+    imgEl.removeEventListener('error', onerror);
   };
-  probe.src = url;
+
+  imgEl.addEventListener('load', onload);
+  imgEl.addEventListener('error', onerror);
+  imgEl.src = url;
 }
 
 function tileHTML(shortcut, groupId) {
