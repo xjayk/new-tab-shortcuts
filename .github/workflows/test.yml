@@ -6,7 +6,6 @@ on:
       - trunk
     paths-ignore:
       - '**/*.md'
-      - '*.html'
       - '.gitignore'
       - '.gitattributes'
 
@@ -19,7 +18,6 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     paths-ignore:
       - '**/*.md'
-      - '*.html'
       - '.gitignore'
       - '.gitattributes'
 
