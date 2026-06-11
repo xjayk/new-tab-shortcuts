@@ -88,9 +88,13 @@ describe('newId', () => {
     expect(ids.size).toBe(100);
   });
 
-  it('returns 8-character strings', async () => {
+  it('returns 36-character UUID strings', async () => {
     const { newId } = await import('../storage.js');
-    expect(newId()).toHaveLength(8);
+    const id = newId();
+    expect(id).toHaveLength(36);
+    expect(id).toMatch(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/
+    );
   });
 });
 

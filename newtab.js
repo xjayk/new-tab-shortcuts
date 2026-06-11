@@ -260,83 +260,97 @@ function groupHTML(group) {
 
 function ungroupedHTML() {
   const tiles = state.shortcuts.map(s => tileHTML(s, '')).join('');
+  const addTile = editMode
+    ? `<button class="tile tile-add" data-action="add-shortcut" title="Add shortcut">
+        <span class="tile-add-icon">+</span>
+      </button>`
+    : '';
   return `
     <section class="group ungrouped" data-group-id="__ungrouped__">
       <div class="tiles">
         ${tiles}
-        <button class="tile tile-add" data-action="add-shortcut" title="Add shortcut">
-          <span class="tile-add-icon">+</span>
-        </button>
+        ${addTile}
       </div>
     </section>`;
 }
 
-function domainFromUrl(url) {
-  try { return new URL(url).hostname; } catch { return ''; }
-}
-
 // ---------------------------------------------------------------------------
-// Favicon loading via off-screen Image probes
+// Favicon loading
 // ---------------------------------------------------------------------------
 
 const _faviconCache = new Map();
 
 function loadTileFavicons(root) {
   root.querySelectorAll('.tile-favicon[data-favicon="pending"]').forEach(el => {
-    const domain = el.dataset.domain;
-    if (!domain) return;
+    const url = el.dataset.url;
+    if (!url) return;
     el.dataset.favicon = 'loading';
-    loadFaviconForEl(el, domain);
+    loadFaviconForEl(el, url);
   });
 }
 
-function loadFaviconForEl(imgEl, domain) {
-  const googleUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
-  const ddgUrl = `https://icons.duckduckgo.com/ip3/${domain}.ico`;
+function loadFaviconForEl(imgEl, pageUrl) {
+  let domain;
+  try { domain = new URL(pageUrl).hostname; } catch { domain = ''; }
+
+  if (!domain) {
+    _faviconCache.set('', null);
+    imgEl.dataset.favicon = 'failed';
+    imgEl.style.display = 'none';
+    imgEl.parentElement?.classList.add('tile-icon--fallback');
+    return;
+  }
 
   if (_faviconCache.has(domain)) {
-    const url = _faviconCache.get(domain);
-    if (url) {
-      imgEl.src = url;
+    const cached = _faviconCache.get(domain);
+    if (cached) {
+      imgEl.dataset.favicon = 'loaded';
+      imgEl.src = cached;
     } else {
+      imgEl.dataset.favicon = 'failed';
       imgEl.style.display = 'none';
-      imgEl.parentElement.classList.add('tile-icon--fallback');
+      imgEl.parentElement?.classList.add('tile-icon--fallback');
     }
     return;
   }
 
-  const tryDdg = () => {
-    const probe = new Image();
-    probe.onload = () => {
-      _faviconCache.set(domain, ddgUrl);
-      imgEl.src = ddgUrl;
-    };
-    probe.onerror = () => {
+  const faviconUrl = new URL(chrome.runtime.getURL('/_favicon/'));
+  faviconUrl.searchParams.set('pageUrl', pageUrl);
+  faviconUrl.searchParams.set('size', '32');
+
+  const onload = () => {
+    if (imgEl.naturalWidth <= 16) {
+      // Grey globe placeholder — Chrome returns this for unvisited/uncached domains.
+      // naturalWidth <= 16 is the only reliable signal without an external request.
       _faviconCache.set(domain, null);
+      imgEl.dataset.favicon = 'failed';
       imgEl.style.display = 'none';
-      imgEl.parentElement.classList.add('tile-icon--fallback');
-    };
-    probe.src = ddgUrl;
+      imgEl.parentElement?.classList.add('tile-icon--fallback');
+    } else {
+      _faviconCache.set(domain, faviconUrl.toString());
+      imgEl.dataset.favicon = 'loaded';
+    }
+    imgEl.removeEventListener('load', onload);
+    imgEl.removeEventListener('error', onerror);
+  };
+  const onerror = () => {
+    _faviconCache.set(domain, null);
+    imgEl.dataset.favicon = 'failed';
+    imgEl.style.display = 'none';
+    imgEl.parentElement?.classList.add('tile-icon--fallback');
+    imgEl.removeEventListener('load', onload);
+    imgEl.removeEventListener('error', onerror);
   };
 
-  const probe = new Image();
-  probe.onload = () => {
-    if (probe.naturalWidth <= 16) {
-      tryDdg();
-    } else {
-      _faviconCache.set(domain, googleUrl);
-      imgEl.src = googleUrl;
-    }
-  };
-  probe.onerror = tryDdg;
-  probe.src = googleUrl;
+  imgEl.addEventListener('load', onload);
+  imgEl.addEventListener('error', onerror);
+  imgEl.src = faviconUrl.toString();
 }
 
 function tileHTML(shortcut, groupId) {
   const initial = (shortcut.name || shortcut.url).charAt(0).toUpperCase();
   const colorIndex = Math.abs(hashStr(shortcut.id)) % ACCENT_COLORS.length;
   const color = ACCENT_COLORS[colorIndex];
-  const domain = domainFromUrl(shortcut.url);
   const menu = editMode
     ? `<span class="tile-menu">
         <button class="tile-menu-btn" data-action="tile-menu" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"
@@ -354,7 +368,7 @@ function tileHTML(shortcut, groupId) {
   return `
     <a class="tile" href="${escAttr(shortcut.url)}" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"${editMode ? ' target="_blank" rel="noopener"' : ''}>
       <span class="tile-icon">
-        <img class="tile-favicon" data-domain="${escAttr(domain)}" data-favicon="pending" alt="">
+        <img class="tile-favicon" data-url="${escAttr(shortcut.url)}" data-favicon="pending" alt="">
         <span class="tile-fallback" style="background:${color}">${escHtml(initial)}</span>
       </span>
       <span class="tile-name">${escHtml(shortcut.name)}</span>
@@ -428,8 +442,6 @@ function initToolbar() {
 
   $addGroupBtn.addEventListener('click', () => promptAddGroup());
   $shortcutBtn.addEventListener('click', () => openAddModal());
-  document.getElementById('export-btn').addEventListener('click', exportState);
-  document.getElementById('import-btn').addEventListener('click', triggerImport);
   $exportBtn.addEventListener('click', exportState);
   $importBtn.addEventListener('click', triggerImport);
   $bgBtn.addEventListener('click', triggerBgPicker);
@@ -778,10 +790,13 @@ function escHtml(str) {
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;');
+    .replace(/"/g, '&quot;')
+    .replace(/`/g, '&#96;');
 }
 
-function escAttr(str) { return escHtml(str); }
+function escAttr(str) {
+  return escHtml(str).replace(/'/g, '&#39;');
+}
 
 function hashStr(str) {
   let h = 0;

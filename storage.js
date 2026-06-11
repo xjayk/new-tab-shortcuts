@@ -18,6 +18,11 @@ const SCHEMA_VERSION = 1;
 /** @typedef {{ id: string, name: string, shortcuts: Shortcut[] }} Group */
 /** @typedef {{ version: number, groups: Group[], shortcuts: Shortcut[] }} AppState */
 
+/** Generate a unique ID (exported for use in newtab.js) */
+function newId() {
+  return crypto.randomUUID();
+}
+
 /**
  * Returns a validated, migrated state object.
  * Handles missing or malformed data gracefully.
@@ -31,13 +36,13 @@ function validate(raw) {
   const groups = raw.groups
     .filter(g => g && typeof g === 'object')
     .map(g => ({
-      id: typeof g.id === 'string' ? g.id : uid(),
+      id: typeof g.id === 'string' ? g.id : newId(),
       name: typeof g.name === 'string' ? g.name : 'Untitled',
       shortcuts: Array.isArray(g.shortcuts)
         ? g.shortcuts
             .filter(s => s && typeof s === 'object' && typeof s.url === 'string')
             .map(s => ({
-              id: typeof s.id === 'string' ? s.id : uid(),
+              id: typeof s.id === 'string' ? s.id : newId(),
               name: typeof s.name === 'string' ? s.name : s.url,
               url: s.url,
             }))
@@ -47,17 +52,12 @@ function validate(raw) {
     ? raw.shortcuts
         .filter(s => s && typeof s === 'object' && typeof s.url === 'string')
         .map(s => ({
-          id: typeof s.id === 'string' ? s.id : uid(),
+          id: typeof s.id === 'string' ? s.id : newId(),
           name: typeof s.name === 'string' ? s.name : s.url,
           url: s.url,
         }))
     : [];
   return { version: SCHEMA_VERSION, groups, shortcuts };
-}
-
-/** Generate a short unique ID */
-function uid() {
-  return Math.random().toString(36).slice(2, 10);
 }
 
 /**
@@ -148,11 +148,6 @@ function onChange(callback) {
       }
     }
   });
-}
-
-/** Generate a new UID (exported for use in newtab.js) */
-function newId() {
-  return uid();
 }
 
 // ---------------------------------------------------------------------------
