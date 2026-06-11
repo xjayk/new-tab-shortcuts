@@ -280,7 +280,8 @@ function tileHTML(shortcut, groupId) {
   const colorIndex = Math.abs(hashStr(shortcut.id)) % ACCENT_COLORS.length;
   const color = ACCENT_COLORS[colorIndex];
   const domain = domainFromUrl(shortcut.url);
-  const faviconUrl = `https://www.google.com/s2/favicons?domain=${escAttr(domain)}&sz=64`;
+  const googleUrl = `https://www.google.com/s2/favicons?domain=${escAttr(domain)}&sz=64`;
+  const ddgUrl = `https://icons.duckduckgo.com/ip3/${escAttr(domain)}.ico`;
   const menu = editMode
     ? `<span class="tile-menu">
         <button class="tile-menu-btn" data-action="tile-menu" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"
@@ -298,8 +299,8 @@ function tileHTML(shortcut, groupId) {
   return `
     <a class="tile" href="${escAttr(shortcut.url)}" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"${editMode ? ' target="_blank" rel="noopener"' : ''}>
       <span class="tile-icon">
-        <img class="tile-favicon" src="${faviconUrl}" alt=""
-             onerror="this.style.display='none';this.parentElement.classList.add('tile-icon--fallback')">
+        <img class="tile-favicon" src="${googleUrl}" alt=""
+             onerror="if(!this.dataset.f){this.dataset.f='1';this.src='${ddgUrl}';}else{this.style.display='none';this.parentElement.classList.add('tile-icon--fallback')}">
         <span class="tile-fallback" style="background:${color}">${escHtml(initial)}</span>
       </span>
       <span class="tile-name">${escHtml(shortcut.name)}</span>
