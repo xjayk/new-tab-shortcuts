@@ -274,26 +274,25 @@ function ungroupedHTML() {
     </section>`;
 }
 
-function domainFromUrl(url) {
-  try { return new URL(url).hostname; } catch { return ''; }
-}
-
 // ---------------------------------------------------------------------------
-// Favicon loading via off-screen Image probes
+// Favicon loading
 // ---------------------------------------------------------------------------
 
 const _faviconCache = new Map();
 
 function loadTileFavicons(root) {
   root.querySelectorAll('.tile-favicon[data-favicon="pending"]').forEach(el => {
-    const domain = el.dataset.domain;
-    if (!domain) return;
+    const url = el.dataset.url;
+    if (!url) return;
     el.dataset.favicon = 'loading';
-    loadFaviconForEl(el, domain);
+    loadFaviconForEl(el, url);
   });
 }
 
-function loadFaviconForEl(imgEl, domain) {
+function loadFaviconForEl(imgEl, pageUrl) {
+  let domain;
+  try { domain = new URL(pageUrl).hostname; } catch { domain = ''; }
+
   if (!domain) {
     _faviconCache.set('', null);
     imgEl.style.display = 'none';
@@ -302,9 +301,9 @@ function loadFaviconForEl(imgEl, domain) {
   }
 
   if (_faviconCache.has(domain)) {
-    const url = _faviconCache.get(domain);
-    if (url) {
-      imgEl.src = url;
+    const cached = _faviconCache.get(domain);
+    if (cached) {
+      imgEl.src = cached;
     } else {
       imgEl.style.display = 'none';
       imgEl.parentElement?.classList.add('tile-icon--fallback');
@@ -312,7 +311,9 @@ function loadFaviconForEl(imgEl, domain) {
     return;
   }
 
-  const url = `chrome://favicon/size/64@1x/https://${domain}/`;
+  const faviconUrl = new URL(chrome.runtime.getURL('/_favicon/'));
+  faviconUrl.searchParams.set('pageUrl', `https://${domain}/`);
+  faviconUrl.searchParams.set('size', '32');
 
   const onload = () => {
     if (imgEl.naturalWidth <= 16) {
@@ -320,7 +321,7 @@ function loadFaviconForEl(imgEl, domain) {
       imgEl.style.display = 'none';
       imgEl.parentElement?.classList.add('tile-icon--fallback');
     } else {
-      _faviconCache.set(domain, url);
+      _faviconCache.set(domain, faviconUrl.toString());
     }
     imgEl.removeEventListener('load', onload);
     imgEl.removeEventListener('error', onerror);
@@ -335,14 +336,13 @@ function loadFaviconForEl(imgEl, domain) {
 
   imgEl.addEventListener('load', onload);
   imgEl.addEventListener('error', onerror);
-  imgEl.src = url;
+  imgEl.src = faviconUrl.toString();
 }
 
 function tileHTML(shortcut, groupId) {
   const initial = (shortcut.name || shortcut.url).charAt(0).toUpperCase();
   const colorIndex = Math.abs(hashStr(shortcut.id)) % ACCENT_COLORS.length;
   const color = ACCENT_COLORS[colorIndex];
-  const domain = domainFromUrl(shortcut.url);
   const menu = editMode
     ? `<span class="tile-menu">
         <button class="tile-menu-btn" data-action="tile-menu" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"
@@ -360,7 +360,7 @@ function tileHTML(shortcut, groupId) {
   return `
     <a class="tile" href="${escAttr(shortcut.url)}" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"${editMode ? ' target="_blank" rel="noopener"' : ''}>
       <span class="tile-icon">
-        <img class="tile-favicon" data-domain="${escAttr(domain)}" data-favicon="pending" alt="">
+        <img class="tile-favicon" data-url="${escAttr(shortcut.url)}" data-favicon="pending" alt="">
         <span class="tile-fallback" style="background:${color}">${escHtml(initial)}</span>
       </span>
       <span class="tile-name">${escHtml(shortcut.name)}</span>
