@@ -144,9 +144,8 @@ function renderEmpty(root) {
     <div class="empty-state">
       <p class="empty-title">Your new tab, your way.</p>
       <p class="empty-sub">Create a group to get started.</p>
-      <button class="btn btn-primary" id="empty-add-group">+ New group</button>
+      <button class="btn btn-primary" data-action="add-group">+ New group</button>
     </div>`;
-  document.getElementById('empty-add-group').addEventListener('click', () => promptAddGroup());
 }
 
 // ---------------------------------------------------------------------------
@@ -381,7 +380,10 @@ function handleClick(e) {
 
   if (EDIT_ACTIONS.has(action) && !editMode) return;
 
-  if (action === 'add-shortcut') {
+  if (action === 'add-group') {
+    e.preventDefault();
+    promptAddGroup();
+  } else if (action === 'add-shortcut') {
     e.preventDefault();
     openAddModal(groupId);
   } else if (action === 'delete-shortcut') {
@@ -604,8 +606,15 @@ function saveShortcut(groupId, nameInput, urlInput, errEl, shortcutId) {
     url = 'https://' + url;
   }
 
-  try { new URL(url); } catch {
+  let parsed;
+  try { parsed = new URL(url); } catch {
     errEl.textContent = 'Please enter a valid URL.';
+    urlInput.focus();
+    return;
+  }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    errEl.textContent = 'Only http and https URLs are allowed.';
     urlInput.focus();
     return;
   }
