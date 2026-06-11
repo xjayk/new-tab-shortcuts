@@ -209,7 +209,7 @@ function renderGroups(root) {
   if (state.shortcuts.length > 0) {
     const ungroupedHtml = ungroupedHTML();
     const existingUngrouped = existingEls.get(UNGROUPED_ID);
-    const ungroupedStateStr = JSON.stringify(state.shortcuts);
+    const ungroupedStateStr = JSON.stringify(state.shortcuts) + String(editMode);
     if (existingUngrouped) {
       if (existingUngrouped._groupState !== ungroupedStateStr) {
         const temp = document.createElement('div');
