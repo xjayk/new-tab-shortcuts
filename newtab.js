@@ -295,6 +295,7 @@ function loadFaviconForEl(imgEl, pageUrl) {
 
   if (!domain) {
     _faviconCache.set('', null);
+    imgEl.dataset.favicon = 'failed';
     imgEl.style.display = 'none';
     imgEl.parentElement?.classList.add('tile-icon--fallback');
     return;
@@ -303,8 +304,10 @@ function loadFaviconForEl(imgEl, pageUrl) {
   if (_faviconCache.has(domain)) {
     const cached = _faviconCache.get(domain);
     if (cached) {
+      imgEl.dataset.favicon = 'loaded';
       imgEl.src = cached;
     } else {
+      imgEl.dataset.favicon = 'failed';
       imgEl.style.display = 'none';
       imgEl.parentElement?.classList.add('tile-icon--fallback');
     }
@@ -312,22 +315,27 @@ function loadFaviconForEl(imgEl, pageUrl) {
   }
 
   const faviconUrl = new URL(chrome.runtime.getURL('/_favicon/'));
-  faviconUrl.searchParams.set('pageUrl', `https://${domain}/`);
+  faviconUrl.searchParams.set('pageUrl', pageUrl);
   faviconUrl.searchParams.set('size', '32');
 
   const onload = () => {
     if (imgEl.naturalWidth <= 16) {
+      // Grey globe placeholder — Chrome returns this for unvisited/uncached domains.
+      // naturalWidth <= 16 is the only reliable signal without an external request.
       _faviconCache.set(domain, null);
+      imgEl.dataset.favicon = 'failed';
       imgEl.style.display = 'none';
       imgEl.parentElement?.classList.add('tile-icon--fallback');
     } else {
       _faviconCache.set(domain, faviconUrl.toString());
+      imgEl.dataset.favicon = 'loaded';
     }
     imgEl.removeEventListener('load', onload);
     imgEl.removeEventListener('error', onerror);
   };
   const onerror = () => {
     _faviconCache.set(domain, null);
+    imgEl.dataset.favicon = 'failed';
     imgEl.style.display = 'none';
     imgEl.parentElement?.classList.add('tile-icon--fallback');
     imgEl.removeEventListener('load', onload);
@@ -434,8 +442,6 @@ function initToolbar() {
 
   $addGroupBtn.addEventListener('click', () => promptAddGroup());
   $shortcutBtn.addEventListener('click', () => openAddModal());
-  document.getElementById('export-btn').addEventListener('click', exportState);
-  document.getElementById('import-btn').addEventListener('click', triggerImport);
   $exportBtn.addEventListener('click', exportState);
   $importBtn.addEventListener('click', triggerImport);
   $bgBtn.addEventListener('click', triggerBgPicker);
