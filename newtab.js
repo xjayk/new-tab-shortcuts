@@ -66,6 +66,9 @@ const writtenStates = new Set();
 
 let editMode = false;
 
+/** Tracks whether a user-set background image is active (persists across edit-mode toggles). */
+let hasBackground = false;
+
 /**
  * setEditMode(next) — single source of truth for edit mode state.
  * NEVER writes back to $editCheckbox.checked here; the checkbox drives us,
@@ -78,8 +81,8 @@ function setEditMode(next) {
   $shortcutBtn.hidden  = !editMode;
   $addGroupBtn.hidden  = !editMode;
   $bgBtn.hidden        = !editMode;
-  $clearBgBtn.hidden   = !editMode || !document.body.style.getPropertyValue('--bg-img');
-  $bgSizeSelect.hidden = !editMode || !document.body.style.getPropertyValue('--bg-img');
+  $clearBgBtn.hidden   = !editMode || !hasBackground;
+  $bgSizeSelect.hidden = !editMode || !hasBackground;
   closeAllTileMenus();
   render();
 }
@@ -752,6 +755,7 @@ function showToast(message, type) {
 // ---------------------------------------------------------------------------
 
 function setBackgroundImage(dataUrl) {
+  hasBackground = true;
   document.body.style.setProperty('--bg-img', `url("${dataUrl}")`);
   $clearBgBtn.hidden  = !editMode;
   $bgSizeSelect.hidden = !editMode;
@@ -767,6 +771,7 @@ function applyBgSize(size) {
 }
 
 function clearBg() {
+  hasBackground = false;
   document.body.style.removeProperty('--bg-img');
   document.body.style.removeProperty('--bg-size');
   $clearBgBtn.hidden   = true;
