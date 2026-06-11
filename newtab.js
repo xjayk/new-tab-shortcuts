@@ -296,7 +296,7 @@ function tileHTML(shortcut, groupId) {
       </span>`
     : '';
   return `
-    <a class="tile" href="${escAttr(shortcut.url)}" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}">
+    <a class="tile" href="${escAttr(shortcut.url)}" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"${editMode ? ' target="_blank" rel="noopener"' : ''}>
       <span class="tile-icon">
         <img class="tile-favicon" src="${faviconUrl}" alt=""
              onerror="this.style.display='none';this.parentElement.classList.add('tile-icon--fallback')">
