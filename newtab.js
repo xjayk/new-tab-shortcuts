@@ -93,6 +93,7 @@ function setEditMode(next) {
 
 const EDIT_ACTIONS = new Set([
   'add-shortcut',
+  'edit-shortcut',
   'delete-shortcut',
   'delete-group',
   'rename-group',
@@ -285,6 +286,8 @@ function tileHTML(shortcut, groupId) {
         <button class="tile-menu-btn" data-action="tile-menu" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"
                 title="More" tabindex="-1">⋮</button>
         <div class="tile-dropdown">
+          <button class="tile-dropdown-item" data-action="edit-shortcut"
+                  data-shortcut-id="${shortcut.id}" data-group-id="${groupId}">Edit</button>
           <button class="tile-dropdown-item" data-action="duplicate-shortcut"
                   data-shortcut-id="${shortcut.id}" data-group-id="${groupId}">Duplicate</button>
           <button class="tile-dropdown-item danger" data-action="delete-shortcut"
@@ -345,6 +348,11 @@ function handleClick(e) {
     e.stopPropagation();
     closeAllTileMenus();
     duplicateShortcut(groupId, shortcutId);
+  } else if (action === 'edit-shortcut') {
+    e.preventDefault();
+    e.stopPropagation();
+    closeAllTileMenus();
+    openAddModal(groupId, shortcutId);
   }
 }
 
@@ -464,7 +472,7 @@ function startRename(el, groupId) {
 // Shortcut operations
 // ---------------------------------------------------------------------------
 
-function openAddModal(groupId) {
+function openAddModal(groupId, shortcutId) {
   if ($modal) $modal.remove();
 
   if (groupId) {
@@ -472,12 +480,27 @@ function openAddModal(groupId) {
     if (!group) return;
   }
 
+  const editing = !!shortcutId;
+  let existing = null;
+  if (editing) {
+    if (groupId) {
+      const group = state.groups.find(g => g.id === groupId);
+      existing = group?.shortcuts.find(s => s.id === shortcutId) ?? null;
+    } else {
+      existing = state.shortcuts.find(s => s.id === shortcutId) ?? null;
+    }
+    if (!existing) return;
+  }
+
+  const title = editing ? 'Edit shortcut' : 'Add shortcut';
+  const saveLabel = editing ? 'Save changes' : 'Add shortcut';
+
   $modal = document.createElement('div');
   $modal.id = 'shortcut-modal';
   $modal.className = 'modal-overlay';
   $modal.innerHTML = `
-    <div class="modal" role="dialog" aria-modal="true" aria-label="Add shortcut">
-      <h2 class="modal-title">Add shortcut</h2>
+    <div class="modal" role="dialog" aria-modal="true" aria-label="${title}">
+      <h2 class="modal-title">${title}</h2>
       <label class="field-label" for="sc-name">Name</label>
       <input id="sc-name" class="field-input" type="text" placeholder="e.g. GitHub" maxlength="80" autocomplete="off" />
       <label class="field-label" for="sc-url">URL</label>
@@ -485,7 +508,7 @@ function openAddModal(groupId) {
       <p id="sc-error" class="field-error" aria-live="polite"></p>
       <div class="modal-footer">
         <button class="btn btn-ghost" id="sc-cancel">Cancel</button>
-        <button class="btn btn-primary" id="sc-save">Add shortcut</button>
+        <button class="btn btn-primary" id="sc-save">${saveLabel}</button>
       </div>
     </div>`;
 
@@ -494,21 +517,27 @@ function openAddModal(groupId) {
   const nameInput = document.getElementById('sc-name');
   const urlInput  = document.getElementById('sc-url');
   const errEl     = document.getElementById('sc-error');
+
+  if (editing) {
+    nameInput.value = existing.name;
+    urlInput.value  = existing.url;
+  }
+
   nameInput.focus();
 
   document.getElementById('sc-cancel').addEventListener('click', closeModal);
   $modal.addEventListener('click', e => { if (e.target === $modal) closeModal(); });
-  document.getElementById('sc-save').addEventListener('click', () => saveShortcut(groupId, nameInput, urlInput, errEl));
+  document.getElementById('sc-save').addEventListener('click', () => saveShortcut(groupId, nameInput, urlInput, errEl, shortcutId));
 
   [nameInput, urlInput].forEach(el => {
     el.addEventListener('keydown', e => {
-      if (e.key === 'Enter')  saveShortcut(groupId, nameInput, urlInput, errEl);
+      if (e.key === 'Enter')  saveShortcut(groupId, nameInput, urlInput, errEl, shortcutId);
       if (e.key === 'Escape') closeModal();
     });
   });
 }
 
-function saveShortcut(groupId, nameInput, urlInput, errEl) {
+function saveShortcut(groupId, nameInput, urlInput, errEl, shortcutId) {
   errEl.textContent = '';
   let url = urlInput.value.trim();
   const name = nameInput.value.trim();
@@ -525,17 +554,35 @@ function saveShortcut(groupId, nameInput, urlInput, errEl) {
     return;
   }
 
-  const shortcut = { id: newId(), name: name || url, url };
-
-  if (groupId) {
-    state = {
-      ...state,
-      groups: state.groups.map(g =>
-        g.id === groupId ? { ...g, shortcuts: [...g.shortcuts, shortcut] } : g
-      ),
-    };
+  if (shortcutId) {
+    const update = { name: name || url, url };
+    if (groupId) {
+      state = {
+        ...state,
+        groups: state.groups.map(g =>
+          g.id === groupId
+            ? { ...g, shortcuts: g.shortcuts.map(s => s.id === shortcutId ? { ...s, ...update } : s) }
+            : g
+        ),
+      };
+    } else {
+      state = {
+        ...state,
+        shortcuts: state.shortcuts.map(s => s.id === shortcutId ? { ...s, ...update } : s),
+      };
+    }
   } else {
-    state = { ...state, shortcuts: [...state.shortcuts, shortcut] };
+    const shortcut = { id: newId(), name: name || url, url };
+    if (groupId) {
+      state = {
+        ...state,
+        groups: state.groups.map(g =>
+          g.id === groupId ? { ...g, shortcuts: [...g.shortcuts, shortcut] } : g
+        ),
+      };
+    } else {
+      state = { ...state, shortcuts: [...state.shortcuts, shortcut] };
+    }
   }
 
   closeModal();
