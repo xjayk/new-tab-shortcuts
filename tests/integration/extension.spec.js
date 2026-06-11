@@ -31,11 +31,16 @@ test.describe('New Tab Shortcuts Extension', () => {
     await expect(page.locator('#add-group-btn')).toHaveText('+ group');
     await expect(page.locator('#import-btn')).toHaveText('import');
     await expect(page.locator('#export-btn')).toHaveText('export');
+    await expect(page.locator('#bg-btn')).toHaveText('+ background');
+    await expect(page.locator('#clear-bg-btn')).toHaveText('clear bg');
+    await expect(page.locator('#bg-size')).toBeHidden();
 
     // All action buttons are hidden by default (view mode)
     await expect(page.locator('#add-group-btn')).toBeHidden();
     await expect(page.locator('#import-btn')).toBeHidden();
     await expect(page.locator('#export-btn')).toBeHidden();
+    await expect(page.locator('#bg-btn')).toBeHidden();
+    await expect(page.locator('#clear-bg-btn')).toBeHidden();
 
     // The edit toggle pill and its hidden checkbox exist
     await expect(page.locator('#edit-toggle')).toBeVisible();

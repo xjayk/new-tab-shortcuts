@@ -10,6 +10,8 @@
  */
 
 const STORAGE_KEY = 'newtab_data';
+const BACKGROUND_KEY = 'newtab_background';
+const BACKGROUND_SIZE_KEY = 'newtab_background_size';
 const SCHEMA_VERSION = 1;
 
 /** @typedef {{ id: string, name: string, url: string }} Shortcut */
@@ -153,4 +155,69 @@ function newId() {
   return uid();
 }
 
-export { init, saveAll, onChange, newId, validate };
+// ---------------------------------------------------------------------------
+// Background image — stored in local-only to avoid sync quota limits
+// ---------------------------------------------------------------------------
+
+/**
+ * Save a background image data URL to local storage.
+ * @param {string} dataUrl
+ * @returns {Promise<void>}
+ */
+async function saveBackground(dataUrl) {
+  return new Promise(resolve => {
+    chrome.storage.local.set({ [BACKGROUND_KEY]: dataUrl }, resolve);
+  });
+}
+
+/**
+ * Read the background image from local storage.
+ * @returns {Promise<string|null>}
+ */
+async function readBackground() {
+  return new Promise(resolve => {
+    chrome.storage.local.get(BACKGROUND_KEY, result => {
+      resolve(result[BACKGROUND_KEY] ?? null);
+    });
+  });
+}
+
+/**
+ * Remove the background image from local storage.
+ * @returns {Promise<void>}
+ */
+async function clearBackground() {
+  return new Promise(resolve => {
+    chrome.storage.local.remove(BACKGROUND_KEY, resolve);
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Background image size — stored in local-only
+// ---------------------------------------------------------------------------
+
+/**
+ * Save the background image size setting to local storage.
+ * @param {'cover'|'contain'|'auto'} size
+ * @returns {Promise<void>}
+ */
+async function saveBackgroundSize(size) {
+  return new Promise(resolve => {
+    chrome.storage.local.set({ [BACKGROUND_SIZE_KEY]: size }, resolve);
+  });
+}
+
+/**
+ * Read the background image size setting from local storage.
+ * @returns {Promise<'cover'|'contain'|'auto'>}
+ */
+async function readBackgroundSize() {
+  return new Promise(resolve => {
+    chrome.storage.local.get(BACKGROUND_SIZE_KEY, result => {
+      const size = result[BACKGROUND_SIZE_KEY];
+      resolve(size === 'contain' || size === 'auto' ? size : 'cover');
+    });
+  });
+}
+
+export { init, saveAll, onChange, newId, validate, saveBackground, readBackground, clearBackground, saveBackgroundSize, readBackgroundSize };

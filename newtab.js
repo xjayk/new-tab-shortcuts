@@ -6,7 +6,7 @@
  * at boot — never re-attached on re-renders, so it can't accumulate.
  */
 
-import { init, saveAll, onChange, newId, validate } from './storage.js';
+import { init, saveAll, onChange, newId, validate, saveBackground, readBackground, clearBackground, saveBackgroundSize, readBackgroundSize } from './storage.js';
 
 // ---------------------------------------------------------------------------
 // State
@@ -27,6 +27,10 @@ let $importBtn;
 let $exportBtn;
 let $editCheckbox;
 let $modal = null;
+let $bgBtn;
+let $clearBgBtn;
+let $bgSizeSelect;
+let $bgFileInput;
 
 // ---------------------------------------------------------------------------
 // Debounce utility
@@ -62,6 +66,9 @@ const writtenStates = new Set();
 
 let editMode = false;
 
+/** Tracks whether a user-set background image is active (persists across edit-mode toggles). */
+let hasBackground = false;
+
 /**
  * setEditMode(next) — single source of truth for edit mode state.
  * NEVER writes back to $editCheckbox.checked here; the checkbox drives us,
@@ -73,6 +80,9 @@ function setEditMode(next) {
   $exportBtn.hidden    = !editMode;
   $shortcutBtn.hidden  = !editMode;
   $addGroupBtn.hidden  = !editMode;
+  $bgBtn.hidden        = !editMode;
+  $clearBgBtn.hidden   = !editMode || !hasBackground;
+  $bgSizeSelect.hidden = !editMode || !hasBackground;
   closeAllTileMenus();
   render();
 }
@@ -83,6 +93,7 @@ function setEditMode(next) {
 
 const EDIT_ACTIONS = new Set([
   'add-shortcut',
+  'edit-shortcut',
   'delete-shortcut',
   'delete-group',
   'rename-group',
@@ -198,7 +209,7 @@ function renderGroups(root) {
   if (state.shortcuts.length > 0) {
     const ungroupedHtml = ungroupedHTML();
     const existingUngrouped = existingEls.get(UNGROUPED_ID);
-    const ungroupedStateStr = JSON.stringify(state.shortcuts);
+    const ungroupedStateStr = JSON.stringify(state.shortcuts) + String(editMode);
     if (existingUngrouped) {
       if (existingUngrouped._groupState !== ungroupedStateStr) {
         const temp = document.createElement('div');
@@ -219,6 +230,7 @@ function renderGroups(root) {
       existingEls.set(UNGROUPED_ID, newChild);
     }
   }
+  loadTileFavicons(root);
 }
 
 function groupHTML(group) {
@@ -264,17 +276,75 @@ function domainFromUrl(url) {
   try { return new URL(url).hostname; } catch { return ''; }
 }
 
+// ---------------------------------------------------------------------------
+// Favicon loading via off-screen Image probes
+// ---------------------------------------------------------------------------
+
+const _faviconCache = new Map();
+
+function loadTileFavicons(root) {
+  root.querySelectorAll('.tile-favicon[data-favicon="pending"]').forEach(el => {
+    const domain = el.dataset.domain;
+    if (!domain) return;
+    el.dataset.favicon = 'loading';
+    loadFaviconForEl(el, domain);
+  });
+}
+
+function loadFaviconForEl(imgEl, domain) {
+  const googleUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+  const ddgUrl = `https://icons.duckduckgo.com/ip3/${domain}.ico`;
+
+  if (_faviconCache.has(domain)) {
+    const url = _faviconCache.get(domain);
+    if (url) {
+      imgEl.src = url;
+    } else {
+      imgEl.style.display = 'none';
+      imgEl.parentElement.classList.add('tile-icon--fallback');
+    }
+    return;
+  }
+
+  const tryDdg = () => {
+    const probe = new Image();
+    probe.onload = () => {
+      _faviconCache.set(domain, ddgUrl);
+      imgEl.src = ddgUrl;
+    };
+    probe.onerror = () => {
+      _faviconCache.set(domain, null);
+      imgEl.style.display = 'none';
+      imgEl.parentElement.classList.add('tile-icon--fallback');
+    };
+    probe.src = ddgUrl;
+  };
+
+  const probe = new Image();
+  probe.onload = () => {
+    if (probe.naturalWidth <= 16) {
+      tryDdg();
+    } else {
+      _faviconCache.set(domain, googleUrl);
+      imgEl.src = googleUrl;
+    }
+  };
+  probe.onerror = tryDdg;
+  probe.src = googleUrl;
+}
+
 function tileHTML(shortcut, groupId) {
   const initial = (shortcut.name || shortcut.url).charAt(0).toUpperCase();
   const colorIndex = Math.abs(hashStr(shortcut.id)) % ACCENT_COLORS.length;
   const color = ACCENT_COLORS[colorIndex];
   const domain = domainFromUrl(shortcut.url);
-  const faviconUrl = `https://www.google.com/s2/favicons?domain=${escAttr(domain)}&sz=64`;
   const menu = editMode
     ? `<span class="tile-menu">
         <button class="tile-menu-btn" data-action="tile-menu" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"
                 title="More" tabindex="-1">⋮</button>
         <div class="tile-dropdown">
+          <button class="tile-dropdown-item" data-action="edit-shortcut"
+                  data-shortcut-id="${shortcut.id}" data-group-id="${groupId}">Edit</button>
           <button class="tile-dropdown-item" data-action="duplicate-shortcut"
                   data-shortcut-id="${shortcut.id}" data-group-id="${groupId}">Duplicate</button>
           <button class="tile-dropdown-item danger" data-action="delete-shortcut"
@@ -283,10 +353,9 @@ function tileHTML(shortcut, groupId) {
       </span>`
     : '';
   return `
-    <a class="tile" href="${escAttr(shortcut.url)}" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}">
+    <a class="tile" href="${escAttr(shortcut.url)}" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"${editMode ? ' target="_blank" rel="noopener"' : ''}>
       <span class="tile-icon">
-        <img class="tile-favicon" src="${faviconUrl}" alt=""
-             onerror="this.style.display='none';this.parentElement.classList.add('tile-icon--fallback')">
+        <img class="tile-favicon" data-domain="${escAttr(domain)}" data-favicon="pending" alt="">
         <span class="tile-fallback" style="background:${color}">${escHtml(initial)}</span>
       </span>
       <span class="tile-name">${escHtml(shortcut.name)}</span>
@@ -335,6 +404,11 @@ function handleClick(e) {
     e.stopPropagation();
     closeAllTileMenus();
     duplicateShortcut(groupId, shortcutId);
+  } else if (action === 'edit-shortcut') {
+    e.preventDefault();
+    e.stopPropagation();
+    closeAllTileMenus();
+    openAddModal(groupId, shortcutId);
   }
 }
 
@@ -356,6 +430,9 @@ function initToolbar() {
   document.getElementById('import-btn').addEventListener('click', triggerImport);
   $exportBtn.addEventListener('click', exportState);
   $importBtn.addEventListener('click', triggerImport);
+  $bgBtn.addEventListener('click', triggerBgPicker);
+  $clearBgBtn.addEventListener('click', clearBg);
+  $bgSizeSelect.addEventListener('change', handleBgSizeChange);
 
   const fileInput = document.createElement('input');
   fileInput.type = 'file';
@@ -364,6 +441,14 @@ function initToolbar() {
   fileInput.id = 'import-file-input';
   fileInput.addEventListener('change', handleImportFile);
   document.body.appendChild(fileInput);
+
+  $bgFileInput = document.createElement('input');
+  $bgFileInput.type = 'file';
+  $bgFileInput.accept = 'image/*';
+  $bgFileInput.style.display = 'none';
+  $bgFileInput.id = 'bg-file-input';
+  $bgFileInput.addEventListener('change', handleBgFile);
+  document.body.appendChild($bgFileInput);
 }
 
 // ---------------------------------------------------------------------------
@@ -443,7 +528,7 @@ function startRename(el, groupId) {
 // Shortcut operations
 // ---------------------------------------------------------------------------
 
-function openAddModal(groupId) {
+function openAddModal(groupId, shortcutId) {
   if ($modal) $modal.remove();
 
   if (groupId) {
@@ -451,12 +536,27 @@ function openAddModal(groupId) {
     if (!group) return;
   }
 
+  const editing = !!shortcutId;
+  let existing = null;
+  if (editing) {
+    if (groupId) {
+      const group = state.groups.find(g => g.id === groupId);
+      existing = group?.shortcuts.find(s => s.id === shortcutId) ?? null;
+    } else {
+      existing = state.shortcuts.find(s => s.id === shortcutId) ?? null;
+    }
+    if (!existing) return;
+  }
+
+  const title = editing ? 'Edit shortcut' : 'Add shortcut';
+  const saveLabel = editing ? 'Save changes' : 'Add shortcut';
+
   $modal = document.createElement('div');
   $modal.id = 'shortcut-modal';
   $modal.className = 'modal-overlay';
   $modal.innerHTML = `
-    <div class="modal" role="dialog" aria-modal="true" aria-label="Add shortcut">
-      <h2 class="modal-title">Add shortcut</h2>
+    <div class="modal" role="dialog" aria-modal="true" aria-label="${title}">
+      <h2 class="modal-title">${title}</h2>
       <label class="field-label" for="sc-name">Name</label>
       <input id="sc-name" class="field-input" type="text" placeholder="e.g. GitHub" maxlength="80" autocomplete="off" />
       <label class="field-label" for="sc-url">URL</label>
@@ -464,7 +564,7 @@ function openAddModal(groupId) {
       <p id="sc-error" class="field-error" aria-live="polite"></p>
       <div class="modal-footer">
         <button class="btn btn-ghost" id="sc-cancel">Cancel</button>
-        <button class="btn btn-primary" id="sc-save">Add shortcut</button>
+        <button class="btn btn-primary" id="sc-save">${saveLabel}</button>
       </div>
     </div>`;
 
@@ -473,21 +573,27 @@ function openAddModal(groupId) {
   const nameInput = document.getElementById('sc-name');
   const urlInput  = document.getElementById('sc-url');
   const errEl     = document.getElementById('sc-error');
+
+  if (editing) {
+    nameInput.value = existing.name;
+    urlInput.value  = existing.url;
+  }
+
   nameInput.focus();
 
   document.getElementById('sc-cancel').addEventListener('click', closeModal);
   $modal.addEventListener('click', e => { if (e.target === $modal) closeModal(); });
-  document.getElementById('sc-save').addEventListener('click', () => saveShortcut(groupId, nameInput, urlInput, errEl));
+  document.getElementById('sc-save').addEventListener('click', () => saveShortcut(groupId, nameInput, urlInput, errEl, shortcutId));
 
   [nameInput, urlInput].forEach(el => {
     el.addEventListener('keydown', e => {
-      if (e.key === 'Enter')  saveShortcut(groupId, nameInput, urlInput, errEl);
+      if (e.key === 'Enter')  saveShortcut(groupId, nameInput, urlInput, errEl, shortcutId);
       if (e.key === 'Escape') closeModal();
     });
   });
 }
 
-function saveShortcut(groupId, nameInput, urlInput, errEl) {
+function saveShortcut(groupId, nameInput, urlInput, errEl, shortcutId) {
   errEl.textContent = '';
   let url = urlInput.value.trim();
   const name = nameInput.value.trim();
@@ -504,17 +610,35 @@ function saveShortcut(groupId, nameInput, urlInput, errEl) {
     return;
   }
 
-  const shortcut = { id: newId(), name: name || url, url };
-
-  if (groupId) {
-    state = {
-      ...state,
-      groups: state.groups.map(g =>
-        g.id === groupId ? { ...g, shortcuts: [...g.shortcuts, shortcut] } : g
-      ),
-    };
+  if (shortcutId) {
+    const update = { name: name || url, url };
+    if (groupId) {
+      state = {
+        ...state,
+        groups: state.groups.map(g =>
+          g.id === groupId
+            ? { ...g, shortcuts: g.shortcuts.map(s => s.id === shortcutId ? { ...s, ...update } : s) }
+            : g
+        ),
+      };
+    } else {
+      state = {
+        ...state,
+        shortcuts: state.shortcuts.map(s => s.id === shortcutId ? { ...s, ...update } : s),
+      };
+    }
   } else {
-    state = { ...state, shortcuts: [...state.shortcuts, shortcut] };
+    const shortcut = { id: newId(), name: name || url, url };
+    if (groupId) {
+      state = {
+        ...state,
+        groups: state.groups.map(g =>
+          g.id === groupId ? { ...g, shortcuts: [...g.shortcuts, shortcut] } : g
+        ),
+      };
+    } else {
+      state = { ...state, shortcuts: [...state.shortcuts, shortcut] };
+    }
   }
 
   closeModal();
@@ -730,6 +854,78 @@ function showToast(message, type) {
 }
 
 // ---------------------------------------------------------------------------
+// Background image
+// ---------------------------------------------------------------------------
+
+function setBackgroundImage(dataUrl) {
+  hasBackground = true;
+  document.body.style.backgroundImage = `url("${dataUrl}")`;
+  document.body.style.backgroundSize = 'cover';
+  document.body.style.backgroundPosition = 'center';
+  document.body.style.backgroundRepeat = 'no-repeat';
+  document.body.style.backgroundAttachment = 'fixed';
+  $clearBgBtn.hidden  = !editMode;
+  $bgSizeSelect.hidden = !editMode;
+  if (!document.querySelector('.bg-overlay')) {
+    const overlay = document.createElement('div');
+    overlay.className = 'bg-overlay';
+    document.body.prepend(overlay);
+  }
+}
+
+function applyBgSize(size) {
+  document.body.style.backgroundSize = size;
+}
+
+function clearBg() {
+  hasBackground = false;
+  document.body.style.backgroundImage = '';
+  document.body.style.backgroundSize = '';
+  document.body.style.backgroundPosition = '';
+  document.body.style.backgroundRepeat = '';
+  document.body.style.backgroundAttachment = '';
+  $clearBgBtn.hidden   = true;
+  $bgSizeSelect.hidden = true;
+  clearBackground();
+  const overlay = document.querySelector('.bg-overlay');
+  if (overlay) overlay.remove();
+}
+
+function handleBgFile(e) {
+  const file = e.target.files?.[0];
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    showToast('Please select an image file', 'error');
+    return;
+  }
+  const reader = new FileReader();
+  reader.addEventListener('load', evt => {
+    const dataUrl = evt.target.result;
+    setBackgroundImage(dataUrl);
+    saveBackground(dataUrl);
+    const size = $bgSizeSelect.value;
+    applyBgSize(size);
+    saveBackgroundSize(size);
+    showToast('Background set', 'success');
+  });
+  reader.addEventListener('error', () => {
+    showToast('Could not read image', 'error');
+  });
+  reader.readAsDataURL(file);
+  $bgFileInput.value = '';
+}
+
+function triggerBgPicker() {
+  $bgFileInput.click();
+}
+
+function handleBgSizeChange() {
+  const size = $bgSizeSelect.value;
+  applyBgSize(size);
+  saveBackgroundSize(size);
+}
+
+// ---------------------------------------------------------------------------
 // Boot
 // ---------------------------------------------------------------------------
 
@@ -740,12 +936,18 @@ document.addEventListener('DOMContentLoaded', () => {
   $importBtn    = document.getElementById('import-btn');
   $exportBtn    = document.getElementById('export-btn');
   $editCheckbox = document.getElementById('edit-checkbox');
+  $bgBtn        = document.getElementById('bg-btn');
+  $clearBgBtn   = document.getElementById('clear-bg-btn');
+  $bgSizeSelect = document.getElementById('bg-size');
 
   // Ensure all edit-only controls start hidden (belt + suspenders with HTML hidden attr)
   $addGroupBtn.hidden  = true;
   $shortcutBtn.hidden  = true;
   $importBtn.hidden    = true;
   $exportBtn.hidden    = true;
+  $bgBtn.hidden        = true;
+  $clearBgBtn.hidden   = true;
+  $bgSizeSelect.hidden = true;
   $editCheckbox.checked = false;
 
   document.addEventListener('keydown', e => {
@@ -791,5 +993,16 @@ document.addEventListener('DOMContentLoaded', () => {
     debouncedSave.cancel();
     state = syncState;
     render();
+  });
+
+  // Load background image from local storage
+  readBackground().then(dataUrl => {
+    if (dataUrl) {
+      setBackgroundImage(dataUrl);
+      readBackgroundSize().then(size => {
+        $bgSizeSelect.value = size;
+        applyBgSize(size);
+      });
+    }
   });
 });

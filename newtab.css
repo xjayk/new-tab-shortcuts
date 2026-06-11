@@ -531,3 +531,48 @@
 /* === Focus ring === */
 
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* === Background image overlay === */
+
+.bg-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.3);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Background toolbar group — green accent to visually separate from edit buttons */
+.toolbar-bg-group {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  padding-left: .75rem;
+  margin-left: .75rem;
+  border-left: 1px solid var(--border);
+}
+
+.btn-bg {
+  background: rgba(45,179,125,.12);
+  color: #2db37d;
+  border: 1px solid rgba(45,179,125,.25);
+}
+.btn-bg:hover {
+  background: rgba(45,179,125,.22);
+  border-color: #2db37d;
+}
+
+/* === Background image size select === */
+
+.bg-size-select {
+  padding: .3rem .4rem;
+  background: rgba(45,179,125,.12);
+  color: #2db37d;
+  border: 1px solid rgba(45,179,125,.25);
+  border-radius: var(--radius-sm);
+  font-size: .78rem;
+  cursor: pointer;
+  outline: none;
+}
+.bg-size-select:focus-visible { box-shadow: 0 0 0 2px var(--accent); }
+.bg-size-select:hover { background: rgba(45,179,125,.22); }
