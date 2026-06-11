@@ -230,6 +230,7 @@ function renderGroups(root) {
       existingEls.set(UNGROUPED_ID, newChild);
     }
   }
+  loadTileFavicons(root);
 }
 
 function groupHTML(group) {
@@ -275,13 +276,68 @@ function domainFromUrl(url) {
   try { return new URL(url).hostname; } catch { return ''; }
 }
 
+// ---------------------------------------------------------------------------
+// Favicon loading via off-screen Image probes
+// ---------------------------------------------------------------------------
+
+const _faviconCache = new Map();
+
+function loadTileFavicons(root) {
+  root.querySelectorAll('.tile-favicon[data-favicon="pending"]').forEach(el => {
+    const domain = el.dataset.domain;
+    if (!domain) return;
+    el.dataset.favicon = 'loading';
+    loadFaviconForEl(el, domain);
+  });
+}
+
+function loadFaviconForEl(imgEl, domain) {
+  const googleUrl = `https://www.google.com/s2/favicons?domain=${domain}&sz=64`;
+  const ddgUrl = `https://icons.duckduckgo.com/ip3/${domain}.ico`;
+
+  if (_faviconCache.has(domain)) {
+    const url = _faviconCache.get(domain);
+    if (url) {
+      imgEl.src = url;
+    } else {
+      imgEl.style.display = 'none';
+      imgEl.parentElement.classList.add('tile-icon--fallback');
+    }
+    return;
+  }
+
+  const tryDdg = () => {
+    const probe = new Image();
+    probe.onload = () => {
+      _faviconCache.set(domain, ddgUrl);
+      imgEl.src = ddgUrl;
+    };
+    probe.onerror = () => {
+      _faviconCache.set(domain, null);
+      imgEl.style.display = 'none';
+      imgEl.parentElement.classList.add('tile-icon--fallback');
+    };
+    probe.src = ddgUrl;
+  };
+
+  const probe = new Image();
+  probe.onload = () => {
+    if (probe.naturalWidth <= 16) {
+      tryDdg();
+    } else {
+      _faviconCache.set(domain, googleUrl);
+      imgEl.src = googleUrl;
+    }
+  };
+  probe.onerror = tryDdg;
+  probe.src = googleUrl;
+}
+
 function tileHTML(shortcut, groupId) {
   const initial = (shortcut.name || shortcut.url).charAt(0).toUpperCase();
   const colorIndex = Math.abs(hashStr(shortcut.id)) % ACCENT_COLORS.length;
   const color = ACCENT_COLORS[colorIndex];
   const domain = domainFromUrl(shortcut.url);
-  const googleUrl = `https://www.google.com/s2/favicons?domain=${escAttr(domain)}&sz=64`;
-  const ddgUrl = `https://icons.duckduckgo.com/ip3/${escAttr(domain)}.ico`;
   const menu = editMode
     ? `<span class="tile-menu">
         <button class="tile-menu-btn" data-action="tile-menu" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"
@@ -299,9 +355,7 @@ function tileHTML(shortcut, groupId) {
   return `
     <a class="tile" href="${escAttr(shortcut.url)}" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"${editMode ? ' target="_blank" rel="noopener"' : ''}>
       <span class="tile-icon">
-        <img class="tile-favicon" src="${googleUrl}" alt=""
-             onload="var c=parseInt(this.dataset.f||0);if(c===0&&this.naturalWidth<=16){this.dataset.f='1';this.src='${ddgUrl}';}else if(c===1&&this.naturalWidth>=40){this.style.display='none';this.parentElement.classList.add('tile-icon--fallback');}"
-             onerror="var c=parseInt(this.dataset.f||0);if(c===0){this.dataset.f='1';this.src='${ddgUrl}';}else{this.style.display='none';this.parentElement.classList.add('tile-icon--fallback');}">
+        <img class="tile-favicon" data-domain="${escAttr(domain)}" data-favicon="pending" alt="">
         <span class="tile-fallback" style="background:${color}">${escHtml(initial)}</span>
       </span>
       <span class="tile-name">${escHtml(shortcut.name)}</span>
