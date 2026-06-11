@@ -604,8 +604,15 @@ function saveShortcut(groupId, nameInput, urlInput, errEl, shortcutId) {
     url = 'https://' + url;
   }
 
-  try { new URL(url); } catch {
+  let parsed;
+  try { parsed = new URL(url); } catch {
     errEl.textContent = 'Please enter a valid URL.';
+    urlInput.focus();
+    return;
+  }
+
+  if (!['http:', 'https:'].includes(parsed.protocol)) {
+    errEl.textContent = 'Only http and https URLs are allowed.';
     urlInput.focus();
     return;
   }
