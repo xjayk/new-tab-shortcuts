@@ -302,11 +302,23 @@ function loadFaviconForEl(imgEl, domain) {
     return;
   }
 
+  // chrome://favicon never fires onerror for unvisited/uncached domains.
+  // Instead it silently returns a generic grey globe, typically 16x16.
+  // We detect this by checking naturalWidth <= 16 in onload and fall back
+  // to the letter tile in that case. This is the only reliable signal
+  // available without making an external network request.
   const url = `chrome://favicon/size/64@1x/https://${domain}/`;
   const probe = new Image();
   probe.onload = () => {
-    _faviconCache.set(domain, url);
-    imgEl.src = url;
+    if (probe.naturalWidth <= 16) {
+      // Grey globe placeholder — treat as no favicon
+      _faviconCache.set(domain, null);
+      imgEl.style.display = 'none';
+      imgEl.parentElement?.classList.add('tile-icon--fallback');
+    } else {
+      _faviconCache.set(domain, url);
+      imgEl.src = url;
+    }
   };
   probe.onerror = () => {
     _faviconCache.set(domain, null);

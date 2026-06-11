@@ -18,6 +18,11 @@ const SCHEMA_VERSION = 1;
 /** @typedef {{ id: string, name: string, shortcuts: Shortcut[] }} Group */
 /** @typedef {{ version: number, groups: Group[], shortcuts: Shortcut[] }} AppState */
 
+/** Generate a unique ID (exported for use in newtab.js) */
+function newId() {
+  return crypto.randomUUID();
+}
+
 /**
  * Returns a validated, migrated state object.
  * Handles missing or malformed data gracefully.
@@ -143,11 +148,6 @@ function onChange(callback) {
       }
     }
   });
-}
-
-/** Generate a unique ID (exported for use in newtab.js) */
-function newId() {
-  return crypto.randomUUID();
 }
 
 // ---------------------------------------------------------------------------
