@@ -14,7 +14,8 @@ This file provides context for any AI assistant (Cursor, GitHub Copilot, etc.) w
 3. **Single Render Function**: All DOM output flows through one `render(state)` call. No virtual DOM, no framework. The function is idempotent — it replaces `#app.innerHTML` entirely on each call.
 4. **Event Delegation**: A single `click` listener is registered on `#app` at boot and never re-attached. All interactive elements use `data-action` attributes. Use `e.target.closest('[data-action]')` to handle clicks, not per-element listeners.
 5. **No Background Service Worker**: This is a new tab page override, not a background extension. No `background.js`, no `chrome.runtime.onInstalled`, no persistent scripts.
-6. **Storage Dual-Layer Strategy**:
+6. **Local Favicons**: Shortcut tiles display an icon by looking for `icons/{domain}.png` (e.g., `icons/github.com.png`). If no file exists, the tile falls back to a colored circle with the first letter of the shortcut name. Users can add custom icons by placing `.png` files in `icons/`. No external service, no privacy leak, works offline.
+7. **Storage Dual-Layer Strategy**:
    - `chrome.storage.local` — instant-read cache for first paint
    - `chrome.storage.sync` — source of truth for cross-device sync
    - On read: paint local immediately, reconcile sync in background
@@ -53,6 +54,7 @@ This file provides context for any AI assistant (Cursor, GitHub Copilot, etc.) w
   6. `syncReady` fires when sync round-trip completes → flip `syncReady = true`, render
 - **Skeleton**: Inline critical CSS in `<style>` inside `newtab.html` so the page paints layout before `newtab.css` loads. The skeleton is server-rendered in HTML (not JS-generated) so it appears before any script executes.
 - **Modal**: The add-shortcut dialog is a dynamically created DOM element appended to `document.body`. It uses CSS animations (`fade-in`, `slide-up`) for enter/exit. On close, the `modal-closing` class triggers exit animations; the modal is removed after `animationend`.
+- **Favicons**: Each tile attempts to load `icons/{domain}.png`. On image error (`onerror`), the `<img>` is hidden and a `.tile-icon--fallback` class reveals a colored circle with the shortcut's first letter. No external network requests — fully offline, no privacy exposure.
 
 ## File Structure
 ```
@@ -61,7 +63,7 @@ This file provides context for any AI assistant (Cursor, GitHub Copilot, etc.) w
 ├── newtab.css        ← Full stylesheet. Loaded non-blocking via <link>. Layout, buttons, tiles, modal, animations
 ├── newtab.js         ← UI logic. ES module. Imports from ./storage.js. State, render, event delegation, CRUD, modal
 ├── storage.js        ← Dual-layer storage abstraction. Exports: init, saveAll, onChange, newId
-├── icons/            ← icon16.png, icon48.png, icon128.png
+├── icons/            ← Extension icons (16/48/128) + per-domain shortcut favicons ({domain}.png)
 ├── README.md         ← Project documentation
 ├── AGENT.md          ← This file
 └── package.json

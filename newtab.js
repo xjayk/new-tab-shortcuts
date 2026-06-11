@@ -269,7 +269,7 @@ function tileHTML(shortcut, groupId) {
   const colorIndex = Math.abs(hashStr(shortcut.id)) % ACCENT_COLORS.length;
   const color = ACCENT_COLORS[colorIndex];
   const domain = domainFromUrl(shortcut.url);
-  const faviconUrl = `https://www.google.com/s2/favicons?domain=${escAttr(domain)}&sz=64`;
+  const faviconUrl = domain ? `icons/${escAttr(domain)}.png` : '';
   const menu = editMode
     ? `<span class="tile-menu">
         <button class="tile-menu-btn" data-action="tile-menu" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"
