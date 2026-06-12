@@ -36,3 +36,6 @@ pnpm test          # Vitest unit tests
 
 ## Privacy
 Favicons are loaded via `chrome://favicon` — no domain data leaves the browser. No analytics, no telemetry, no external requests of any kind.
+
+---
+For full features, usage instructions, and file architecture, see [DETAILS.md](./DETAILS.md).
