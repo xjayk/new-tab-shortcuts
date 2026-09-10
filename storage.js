@@ -375,12 +375,18 @@ async function createSyncer({ debounceMs = 400, historyLimit = 10, writerId } = 
         if (revision <= remoteRevisionFloor) return;
 
         // Sync stores the envelope { __sync } so echoes can be attributed to us.
-        await saveAll(state, { writerId: resolvedWriterId, revision });
         acknowledgedRevisions.add(revision);
         // Prune old acknowledged revisions
         if (acknowledgedRevisions.size > historyLimit) {
           const minRev = Math.min(...acknowledgedRevisions);
           acknowledgedRevisions.delete(minRev);
+        }
+
+        try {
+          await saveAll(state, { writerId: resolvedWriterId, revision });
+        } catch (err) {
+          acknowledgedRevisions.delete(revision);
+          throw err;
         }
       } finally {
         writeInFlight = false;
@@ -424,7 +430,7 @@ async function createSyncer({ debounceMs = 400, historyLimit = 10, writerId } = 
      * @param {SyncMeta|null} meta
      * @returns {boolean}
      */
-onRemote(state, meta) {
+    onRemote(state, meta) {
       // Echo check: our writerId + acknowledged revision?
       if (meta && meta.writerId === resolvedWriterId && acknowledgedRevisions.has(meta.revision)) {
         return false;

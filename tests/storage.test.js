@@ -564,7 +564,7 @@ it('persist schedules a debounced saveAll to both layers', async () => {
     expect(syncer.onRemote(stateA, meta)).toBe(false);
   });
 
-  it.skip('onRemote returns true for a remote state from a different writer', async () => {
+  it('onRemote returns true for a remote state from a different writer', async () => {
     const { createSyncer } = await import('../storage.js');
     mockSetsOk();
     const syncer = await createSyncer({ debounceMs: 100, writerId: 'test-writer-id' });
@@ -576,7 +576,7 @@ it('persist schedules a debounced saveAll to both layers', async () => {
     expect(syncer.onRemote(stateB, { writerId: 'other-writer', revision: 5 })).toBe(true);
   });
 
-  it.skip('onRemote returns true for a remote state with same writer but different revision', async () => {
+  it('onRemote returns true for a remote state with same writer but different revision', async () => {
     const { createSyncer } = await import('../storage.js');
     mockSetsOk();
     const syncer = await createSyncer({ debounceMs: 100, writerId: 'test-writer-id' });
@@ -688,6 +688,36 @@ it('persist schedules a debounced saveAll to both layers', async () => {
   });
 
   // --- Regression tests for review issues ---
+
+  it('echo arriving while saveAll is in-flight is recognized as self-echo and not re-asserted', async () => {
+    const { createSyncer, onChange } = await import('../storage.js');
+    mockSetsOk();
+    chrome.storage.local.set.mockImplementation((obj, cb) => cb && cb());
+
+    // Trigger storage.onChanged event DURING chrome.storage.sync.set callback execution
+    chrome.storage.sync.set.mockImplementation((payload, cb) => {
+      const listener = chrome.storage.onChanged.addListener.mock.calls[0]?.[0];
+      if (listener) {
+        listener({ newtab_data: { newValue: payload.newtab_data } }, 'sync');
+      }
+      cb && cb();
+    });
+
+    const syncer = await createSyncer({ debounceMs: 100, writerId: 'test-writer-id' });
+    let applied = null;
+    onChange((syncState, meta) => {
+      if (!syncer.onRemote(syncState, meta)) return;
+      applied = syncState;
+    });
+
+    const p = syncer.persist(stateA);
+    vi.advanceTimersByTime(100);
+    await p;
+
+    // Self-echo firing during saveAll must be suppressed and not trigger reconcileRemote
+    expect(applied).toBeNull();
+    expect(chrome.storage.sync.set).toHaveBeenCalledTimes(1);
+  });
 
   it('two-device reversion: remote reverts to a prior local state (same content, different provenance)', async () => {
     const { createSyncer, onChange } = await import('../storage.js');

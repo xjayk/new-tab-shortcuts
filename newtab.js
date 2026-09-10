@@ -56,12 +56,12 @@ let hasBackground = false;
  */
 function setEditMode(next) {
   editMode = next;
-  $importBtn.hidden    = !editMode;
-  $exportBtn.hidden    = !editMode;
-  $shortcutBtn.hidden  = !editMode;
-  $addGroupBtn.hidden  = !editMode;
-  $bgBtn.hidden        = !editMode;
-  $clearBgBtn.hidden   = !editMode || !hasBackground;
+  $importBtn.hidden = !editMode;
+  $exportBtn.hidden = !editMode;
+  $shortcutBtn.hidden = !editMode;
+  $addGroupBtn.hidden = !editMode;
+  $bgBtn.hidden = !editMode;
+  $clearBgBtn.hidden = !editMode || !hasBackground;
   $bgSizeSelect.hidden = !editMode || !hasBackground;
   closeAllTileMenus();
   render();
@@ -387,8 +387,8 @@ function handleClick(e) {
   const btn = e.target.closest('[data-action]');
   if (!btn) return;
 
-  const action     = btn.dataset.action;
-  const groupId    = btn.dataset.groupId;
+  const action = btn.dataset.action;
+  const groupId = btn.dataset.groupId;
   const shortcutId = btn.dataset.shortcutId;
 
   if (EDIT_ACTIONS.has(action) && !editMode) return;
@@ -537,7 +537,7 @@ function startRename(el, groupId) {
 
   input.addEventListener('blur', commit);
   input.addEventListener('keydown', e => {
-    if (e.key === 'Enter')  { e.preventDefault(); input.blur(); }
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
     if (e.key === 'Escape') { input.removeEventListener('blur', commit); render(); }
   });
 }
@@ -589,12 +589,12 @@ function openAddModal(groupId, shortcutId) {
   document.body.appendChild($modal);
 
   const nameInput = document.getElementById('sc-name');
-  const urlInput  = document.getElementById('sc-url');
-  const errEl     = document.getElementById('sc-error');
+  const urlInput = document.getElementById('sc-url');
+  const errEl = document.getElementById('sc-error');
 
   if (editing) {
     nameInput.value = existing.name;
-    urlInput.value  = existing.url;
+    urlInput.value = existing.url;
   }
 
   nameInput.focus();
@@ -605,7 +605,7 @@ function openAddModal(groupId, shortcutId) {
 
   [nameInput, urlInput].forEach(el => {
     el.addEventListener('keydown', e => {
-      if (e.key === 'Enter')  saveShortcut(groupId, nameInput, urlInput, errEl, shortcutId);
+      if (e.key === 'Enter') saveShortcut(groupId, nameInput, urlInput, errEl, shortcutId);
       if (e.key === 'Escape') closeModal();
     });
   });
@@ -816,7 +816,9 @@ function persist() {
   render();
   // Fire-and-forget: the UI must not wait on sync, but surface failures instead
   // of leaking an unhandled rejection from the debounced write.
-  syncer.persist(state).catch(err => console.error('Failed to persist shortcuts:', err));
+  (syncer ? Promise.resolve(syncer) : syncerPromise)
+    .then(s => s.persist(state))
+    .catch(err => console.error('Failed to persist shortcuts:', err));
 }
 
 // ---------------------------------------------------------------------------
@@ -870,7 +872,7 @@ function handleKeyNavigation(e) {
   if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
   const tag = document.activeElement?.tagName;
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)
-      || document.activeElement?.closest('[contenteditable]')) return;
+    || document.activeElement?.closest('[contenteditable]')) return;
 
   const idx = keyIndexForCode(e.code);
   if (idx === null) return;
@@ -969,7 +971,7 @@ function setBackgroundImage(dataUrl) {
   document.body.style.backgroundPosition = 'center';
   document.body.style.backgroundRepeat = 'no-repeat';
   document.body.style.backgroundAttachment = 'fixed';
-  $clearBgBtn.hidden  = !editMode;
+  $clearBgBtn.hidden = !editMode;
   $bgSizeSelect.hidden = !editMode;
   if (!document.querySelector('.bg-overlay')) {
     const overlay = document.createElement('div');
@@ -989,7 +991,7 @@ function clearBg() {
   document.body.style.backgroundPosition = '';
   document.body.style.backgroundRepeat = '';
   document.body.style.backgroundAttachment = '';
-  $clearBgBtn.hidden   = true;
+  $clearBgBtn.hidden = true;
   $bgSizeSelect.hidden = true;
   clearBackground();
   const overlay = document.querySelector('.bg-overlay');
@@ -1034,24 +1036,24 @@ function handleBgSizeChange() {
 // Boot
 // ---------------------------------------------------------------------------
 
-document.addEventListener('DOMContentLoaded', () => {
-  $app          = document.getElementById('app');
-  $addGroupBtn  = document.getElementById('add-group-btn');
-  $shortcutBtn  = document.getElementById('add-shortcut-btn');
-  $importBtn    = document.getElementById('import-btn');
-  $exportBtn    = document.getElementById('export-btn');
+function boot() {
+  $app = document.getElementById('app');
+  $addGroupBtn = document.getElementById('add-group-btn');
+  $shortcutBtn = document.getElementById('add-shortcut-btn');
+  $importBtn = document.getElementById('import-btn');
+  $exportBtn = document.getElementById('export-btn');
   $editCheckbox = document.getElementById('edit-checkbox');
-  $bgBtn        = document.getElementById('bg-btn');
-  $clearBgBtn   = document.getElementById('clear-bg-btn');
+  $bgBtn = document.getElementById('bg-btn');
+  $clearBgBtn = document.getElementById('clear-bg-btn');
   $bgSizeSelect = document.getElementById('bg-size');
 
   // Ensure all edit-only controls start hidden (belt + suspenders with HTML hidden attr)
-  $addGroupBtn.hidden  = true;
-  $shortcutBtn.hidden  = true;
-  $importBtn.hidden    = true;
-  $exportBtn.hidden    = true;
-  $bgBtn.hidden        = true;
-  $clearBgBtn.hidden   = true;
+  $addGroupBtn.hidden = true;
+  $shortcutBtn.hidden = true;
+  $importBtn.hidden = true;
+  $exportBtn.hidden = true;
+  $bgBtn.hidden = true;
+  $clearBgBtn.hidden = true;
   $bgSizeSelect.hidden = true;
   $editCheckbox.checked = false;
 
@@ -1059,7 +1061,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((e.key === 'e' || e.key === 'E') && !e.metaKey && !e.ctrlKey && !e.altKey) {
       const tag = document.activeElement?.tagName;
       if (!['INPUT', 'TEXTAREA', 'A', 'BUTTON', 'SELECT'].includes(tag)
-          && !document.activeElement?.closest('[contenteditable]')) {
+        && !document.activeElement?.closest('[contenteditable]')) {
         // Programmatically toggle checkbox then dispatch change so the single handler fires
         $editCheckbox.checked = !$editCheckbox.checked;
         $editCheckbox.dispatchEvent(new Event('change'));
@@ -1095,8 +1097,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   );
 
-  onChange((syncState, meta) => {
-    if (!syncer.onRemote(syncState, meta)) return;
+  onChange(async (syncState, meta) => {
+    const s = syncer || await syncerPromise;
+    if (!s.onRemote(syncState, meta)) return;
     state = syncState;
     render();
   });
@@ -1111,4 +1114,10 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
   });
-});
+}
+
+if (typeof document !== 'undefined' && document.readyState && document.readyState !== 'loading') {
+  boot();
+} else if (typeof document !== 'undefined' && document.addEventListener) {
+  document.addEventListener('DOMContentLoaded', boot);
+}
