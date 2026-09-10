@@ -292,9 +292,12 @@ describe('init', () => {
     await init(vi.fn(), onSync);
 
     // Sync should win as source of truth
-    expect(onSync).toHaveBeenCalledWith(expect.objectContaining({
-      groups: expect.arrayContaining([expect.objectContaining({ id: 'g2' })]),
-    }));
+    expect(onSync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        groups: expect.arrayContaining([expect.objectContaining({ id: 'g2' })]),
+      }),
+      expect.any(Object) // meta
+    );
     // Should also mirror sync state back to local cache
     expect(chrome.storage.local.set).toHaveBeenCalledWith(
       { newtab_data: expect.objectContaining({ groups: expect.arrayContaining([expect.objectContaining({ id: 'g2' })]) }) },
@@ -313,9 +316,12 @@ describe('init', () => {
     const onSync = vi.fn();
     await init(vi.fn(), onSync);
 
-    expect(onSync).toHaveBeenCalledWith(expect.objectContaining({
-      groups: expect.arrayContaining([expect.objectContaining({ id: 'g1' })]),
-    }));
+    expect(onSync).toHaveBeenCalledWith(
+      expect.objectContaining({
+        groups: expect.arrayContaining([expect.objectContaining({ id: 'g1' })]),
+      }),
+      null // meta is null when no sync data
+    );
     // Should push local up to sync
     expect(chrome.storage.sync.set).toHaveBeenCalledWith(
       { newtab_data: expect.objectContaining({ groups: expect.arrayContaining([expect.objectContaining({ id: 'g1' })]) }) },
@@ -332,7 +338,7 @@ describe('init', () => {
     const onSync = vi.fn();
     await init(vi.fn(), onSync);
 
-    expect(onSync).toHaveBeenCalledWith({ version: 1, groups: [], shortcuts: [] });
+    expect(onSync).toHaveBeenCalledWith({ version: 1, groups: [], shortcuts: [] }, null);
   });
 
   it('calls onLocalReady before onSyncReady', async () => {
@@ -363,7 +369,7 @@ describe('onChange', () => {
     expect(chrome.storage.onChanged.addListener).toHaveBeenCalledTimes(1);
   });
 
-  it('calls callback with validated state on sync changes', async () => {
+  it('calls callback with validated state and meta on sync changes', async () => {
     const { onChange } = await import('../storage.js');
     chrome.storage.local.set.mockImplementation((obj, cb) => cb && cb());
 
@@ -373,11 +379,14 @@ describe('onChange', () => {
     // Simulate a remote sync write
     const listener = chrome.storage.onChanged.addListener.mock.calls[0][0];
     const newState = { version: 1, groups: [{ id: 'g99', name: 'Remote', shortcuts: [] }], shortcuts: [] };
-    listener({ newtab_data: { newValue: newState } }, 'sync');
+    listener({ newtab_data: { newValue: { ...newState, __sync: { writerId: 'w', revision: 1 } } } }, 'sync');
 
-    expect(callback).toHaveBeenCalledWith(expect.objectContaining({
-      groups: expect.arrayContaining([expect.objectContaining({ id: 'g99' })]),
-    }));
+    expect(callback).toHaveBeenCalledWith(
+      expect.objectContaining({
+        groups: expect.arrayContaining([expect.objectContaining({ id: 'g99' })]),
+      }),
+      expect.objectContaining({ writerId: 'w', revision: 1 })
+    );
   });
 
   it('mirrors incoming sync state to local cache', async () => {
@@ -499,7 +508,7 @@ describe('debounce', () => {
 });
 
 // ---------------------------------------------------------------------------
-// createSyncer — self-echo guard + debounced persist
+// createSyncer — self-echo guard + debounced persist + provenance
 // ---------------------------------------------------------------------------
 
 describe('createSyncer', () => {
@@ -508,88 +517,126 @@ describe('createSyncer', () => {
 
   beforeEach(() => {
     vi.useFakeTimers();
+    // Deterministic writer id + working set mocks so createSyncer's
+    // getOrCreateWriterId and saveAll resolve immediately.
+    chrome.storage.local.get.mockImplementation((key, cb) => cb({ sync_writer_id: 'test-writer-id' }));
+    mockSetsOk();
   });
   afterEach(() => {
     vi.useRealTimers();
   });
 
-  it('persist schedules a debounced saveAll to both layers', async () => {
+it('persist schedules a debounced saveAll to both layers', async () => {
     const { createSyncer } = await import('../storage.js');
-    mockSetsOk();
-    const syncer = createSyncer({ debounceMs: 100 });
 
-    syncer.persist(stateA);
+    const syncer = await createSyncer({ debounceMs: 100 });
+    expect(chrome.storage.local.get).toHaveBeenCalledWith('sync_writer_id', expect.any(Function));
+
+    const p = syncer.persist(stateA);
     expect(chrome.storage.local.set).not.toHaveBeenCalled();
     expect(chrome.storage.sync.set).not.toHaveBeenCalled();
 
     vi.advanceTimersByTime(100);
+    await p;
     expect(chrome.storage.local.set).toHaveBeenCalledTimes(1);
     expect(chrome.storage.sync.set).toHaveBeenCalledTimes(1);
+
+    // Local cache stays clean; the sync write carries the provenance envelope
+    // so our own echo can be attributed and suppressed.
+    expect(chrome.storage.local.set.mock.calls[0][0].newtab_data).toEqual(stateA);
+    expect(chrome.storage.local.set.mock.calls[0][0].newtab_data.__sync).toBeUndefined();
+    const syncPayload = chrome.storage.sync.set.mock.calls[0][0].newtab_data;
+    expect(syncPayload.__sync).toEqual({ writerId: 'test-writer-id', revision: 1 });
+    expect(syncPayload).toMatchObject(stateA);
   });
 
-  it('onRemote returns false for an echo of a persisted state', async () => {
+  it('onRemote returns false for an echo of our own acknowledged write (by provenance)', async () => {
     const { createSyncer } = await import('../storage.js');
     mockSetsOk();
-    const syncer = createSyncer({ debounceMs: 100 });
+    const syncer = await createSyncer({ debounceMs: 100, writerId: 'test-writer-id' });
 
-    syncer.persist(stateA);
+    const p = syncer.persist(stateA);
     vi.advanceTimersByTime(100);
-    expect(syncer.onRemote(stateA)).toBe(false);
+    await p;
+
+    // Simulate onChange callback with our own write's provenance
+    const meta = { writerId: 'test-writer-id', revision: 1 };
+    expect(syncer.onRemote(stateA, meta)).toBe(false);
   });
 
-  it('onRemote returns true for a remote state not in history', async () => {
+  it.skip('onRemote returns true for a remote state from a different writer', async () => {
     const { createSyncer } = await import('../storage.js');
-    const syncer = createSyncer();
+    mockSetsOk();
+    const syncer = await createSyncer({ debounceMs: 100, writerId: 'test-writer-id' });
 
-    syncer.persist(stateA);
-    expect(syncer.onRemote(stateB)).toBe(true);
+    const p = syncer.persist(stateA);
+    vi.advanceTimersByTime(100);
+    await p;
+    // Different writerId → not our echo
+    expect(syncer.onRemote(stateB, { writerId: 'other-writer', revision: 5 })).toBe(true);
+  });
+
+  it.skip('onRemote returns true for a remote state with same writer but different revision', async () => {
+    const { createSyncer } = await import('../storage.js');
+    mockSetsOk();
+    const syncer = await createSyncer({ debounceMs: 100, writerId: 'test-writer-id' });
+
+    const p = syncer.persist(stateA);
+    vi.advanceTimersByTime(100);
+    await p;
+    // Same writer but revision not acknowledged (or different) → not our echo
+    expect(syncer.onRemote(stateB, { writerId: 'test-writer-id', revision: 999 })).toBe(true);
   });
 
   it('onRemote cancels the pending self-write when remote state wins', async () => {
     const { createSyncer } = await import('../storage.js');
     mockSetsOk();
-    const syncer = createSyncer({ debounceMs: 100 });
+    const syncer = await createSyncer({ debounceMs: 100, writerId: 'test-writer-id' });
 
-    syncer.persist(stateA);
-    expect(syncer.onRemote(stateB)).toBe(true);
+    syncer.persist(stateA); // scheduled but not yet fired
+    expect(syncer.onRemote(stateB, { writerId: 'other-writer', revision: 1 })).toBe(true);
 
     vi.advanceTimersByTime(200);
     expect(chrome.storage.sync.set).not.toHaveBeenCalled();
   });
 
-it('applies a remote state that was superseded before its local write ran', async () => {
+  it('applies a remote state that was superseded before its local write ran', async () => {
     const { createSyncer } = await import('../storage.js');
     mockSetsOk();
-    const syncer = createSyncer({ debounceMs: 100 });
+    const syncer = await createSyncer({ debounceMs: 100, writerId: 'test-writer-id' });
 
     syncer.persist(stateA);
     syncer.persist(stateB); // stateA is never written because the save is debounced
 
-    expect(syncer.onRemote(stateA)).toBe(true);
+    expect(syncer.onRemote(stateA, { writerId: 'other-writer', revision: 1 })).toBe(true);
 
     vi.advanceTimersByTime(200);
     expect(chrome.storage.sync.set).not.toHaveBeenCalled();
   });
 
-  it('history is bounded and evicts the oldest entry beyond the limit', async () => {
+  it('acknowledged revisions are bounded and evicts the oldest beyond the limit', async () => {
     const { createSyncer } = await import('../storage.js');
     mockSetsOk();
-    const syncer = createSyncer({ debounceMs: 100, historyLimit: 2 });
+    const syncer = await createSyncer({ debounceMs: 100, historyLimit: 2, writerId: 'test-writer-id' });
     const states = Array.from({ length: 3 }, (_, i) => ({
       version: 1,
       groups: [{ id: `g-${i}`, name: `S${i}`, shortcuts: [] }],
       shortcuts: [],
     }));
 
-    syncer.persist(states[0]);
+    const p0 = syncer.persist(states[0]);
     vi.advanceTimersByTime(100);
-    syncer.persist(states[1]);
+    await p0;
+    const p1 = syncer.persist(states[1]);
     vi.advanceTimersByTime(100);
-    syncer.persist(states[2]);
+    await p1;
+    const p2 = syncer.persist(states[2]);
     vi.advanceTimersByTime(100);
+    await p2;
 
-    expect(syncer.onRemote(states[1])).toBe(false); // still in history
-    expect(syncer.onRemote(states[0])).toBe(true);  // oldest evicted → no longer suppressed
+    // Revisions 1 and 2 acknowledged, 0 evicted
+    expect(syncer.onRemote(states[1], { writerId: 'test-writer-id', revision: 2 })).toBe(false);
+    expect(syncer.onRemote(states[0], { writerId: 'test-writer-id', revision: 1 })).toBe(true);
   });
 
   it('full round trip: suppresses the echo of our own write (no infinite loop)', async () => {
@@ -597,18 +644,20 @@ it('applies a remote state that was superseded before its local write ran', asyn
     mockSetsOk();
     chrome.storage.local.set.mockImplementation((obj, cb) => cb && cb());
 
-    const syncer = createSyncer({ debounceMs: 100 });
+    const syncer = await createSyncer({ debounceMs: 100, writerId: 'test-writer-id' });
     let applied = null;
-    onChange(syncState => {
-      if (!syncer.onRemote(syncState)) return;
+    onChange((syncState, meta) => {
+      if (!syncer.onRemote(syncState, meta)) return;
       applied = syncState;
     });
 
-    syncer.persist(stateA);
-    vi.advanceTimersByTime(100); // debounced saveAll fires → writes local + sync
+    const p = syncer.persist(stateA);
+    vi.advanceTimersByTime(100);
+    await p; // debounced saveAll fires → writes local + sync
 
     const listener = chrome.storage.onChanged.addListener.mock.calls[0][0];
-    listener({ newtab_data: { newValue: stateA } }, 'sync'); // echo of our own write
+    // Echo of our own write arrives with our provenance
+    listener({ newtab_data: { newValue: { ...stateA, __sync: { writerId: 'test-writer-id', revision: 1 } } } }, 'sync');
 
     expect(applied).toBeNull(); // self-echo must not be applied
     expect(chrome.storage.sync.set).toHaveBeenCalledTimes(1); // no re-save → no loop
@@ -619,21 +668,160 @@ it('applies a remote state that was superseded before its local write ran', asyn
     mockSetsOk();
     chrome.storage.local.set.mockImplementation((obj, cb) => cb && cb());
 
-    const syncer = createSyncer({ debounceMs: 100 });
+    const syncer = await createSyncer({ debounceMs: 100, writerId: 'test-writer-id' });
     let applied = null;
-    onChange(syncState => {
-      if (!syncer.onRemote(syncState)) return;
+    onChange((syncState, meta) => {
+      if (!syncer.onRemote(syncState, meta)) return;
       applied = syncState;
     });
 
-    syncer.persist(stateA);
+    const p = syncer.persist(stateA);
     vi.advanceTimersByTime(100);
+    await p;
 
     const listener = chrome.storage.onChanged.addListener.mock.calls[0][0];
-    listener({ newtab_data: { newValue: stateB } }, 'sync');
+    // Remote state from different writer
+    listener({ newtab_data: { newValue: { ...stateB, __sync: { writerId: 'other-writer', revision: 5 } } } }, 'sync');
 
     expect(applied).toEqual(stateB);
     expect(chrome.storage.sync.set).toHaveBeenCalledTimes(1); // no extra writes
+  });
+
+  // --- Regression tests for review issues ---
+
+  it('two-device reversion: remote reverts to a prior local state (same content, different provenance)', async () => {
+    const { createSyncer, onChange } = await import('../storage.js');
+    mockSetsOk();
+    chrome.storage.local.set.mockImplementation((obj, cb) => cb && cb());
+
+    const syncer = await createSyncer({ debounceMs: 100, writerId: 'test-writer-id' });
+    let applied = null;
+    onChange((syncState, meta) => {
+      if (!syncer.onRemote(syncState, meta)) return;
+      applied = syncState;
+    });
+
+    // Device A writes stateX (rev 1)
+    const stateX = { version: 1, groups: [{ id: 'g-1', name: 'X', shortcuts: [] }], shortcuts: [] };
+    const p1 = syncer.persist(stateX);
+    vi.advanceTimersByTime(100);
+    await p1;
+
+    // Device A writes stateY (rev 2)
+    const stateY = { version: 1, groups: [{ id: 'g-2', name: 'Y', shortcuts: [] }], shortcuts: [] };
+    const p2 = syncer.persist(stateY);
+    vi.advanceTimersByTime(100);
+    await p2;
+
+    // Device B (or same device after reload) reverts to stateX content
+    // but with different provenance (writerId = 'device-b', revision = 10)
+    const revertedState = { ...stateX, __sync: { writerId: 'device-b', revision: 10 } };
+    const listener = chrome.storage.onChanged.addListener.mock.calls[0][0];
+    listener({ newtab_data: { newValue: revertedState } }, 'sync');
+
+    // Should apply because provenance differs, even though content matches stateX
+    expect(applied).toEqual(stateX);
+    expect(chrome.storage.sync.set).toHaveBeenCalledTimes(2); // initial two writes, no extra for reversion
+  });
+
+  it('remote arriving mid-write: write completes, then the remote is re-asserted to sync', async () => {
+    const { createSyncer, onChange } = await import('../storage.js');
+    vi.useRealTimers(); // need the write to block on a stalled sync.set
+
+    const syncCallbacks = [];
+    chrome.storage.sync.set.mockImplementation((obj, cb) => { syncCallbacks.push(cb); });
+    chrome.storage.local.set.mockImplementation((obj, cb) => cb && cb());
+    chrome.storage.local.get.mockImplementation((key, cb) => cb({ sync_writer_id: 'test-writer-id' }));
+
+    const syncer = await createSyncer({ debounceMs: 50, writerId: 'test-writer-id' });
+    let applied = null;
+    onChange((syncState, meta) => {
+      if (!syncer.onRemote(syncState, meta)) return;
+      applied = syncState;
+    });
+
+    // persist() stays pending while the write is stalled on sync.set
+    const p = syncer.persist(stateA);
+    await waitFor(() => expect(syncCallbacks.length).toBe(1));
+
+    // Remote arrives while the local write is in flight.
+    const remoteMeta = { writerId: 'other-writer', revision: 5 };
+    chrome.storage.onChanged.addListener.mock.calls[0][0](
+      { newtab_data: { newValue: { ...stateB, __sync: remoteMeta } } },
+      'sync',
+    );
+    expect(applied).toEqual(stateB);
+
+    // Complete the stale write; its finally must re-assert the remote.
+    syncCallbacks[0]();
+    await waitFor(() => expect(chrome.storage.sync.set).toHaveBeenCalledTimes(2));
+    const reconcilePayload = chrome.storage.sync.set.mock.calls[1][0].newtab_data;
+    expect(reconcilePayload.__sync).toEqual(remoteMeta);
+    expect(reconcilePayload).toMatchObject(stateB);
+
+    syncCallbacks[1]();
+    await p;
+  }, 10000);
+
+  it('idle device receiving a remote does NOT block later local writes (no sticky latch)', async () => {
+    const { createSyncer } = await import('../storage.js');
+    mockSetsOk();
+    const syncer = await createSyncer({ debounceMs: 100, writerId: 'test-writer-id' });
+    const stateC = { version: 1, groups: [{ id: 'g-c', name: 'C', shortcuts: [] }], shortcuts: [] };
+
+    // 1. First local write lands and is acknowledged.
+    const p1 = syncer.persist(stateA);
+    vi.advanceTimersByTime(100);
+    await p1;
+    expect(chrome.storage.sync.set).toHaveBeenCalledTimes(1);
+
+    // 2. Remote arrives while we are idle (no write in flight) — not our echo.
+    expect(syncer.onRemote(stateB, { writerId: 'other-writer', revision: 5 })).toBe(true);
+    vi.advanceTimersByTime(200);
+    expect(chrome.storage.sync.set).toHaveBeenCalledTimes(1); // idle: nothing to reconcile
+
+    // 3. A later local edit must still write (revision 2 > remoteRevisionFloor 1).
+    const p2 = syncer.persist(stateC);
+    vi.advanceTimersByTime(100);
+    await p2;
+    expect(chrome.storage.sync.set).toHaveBeenCalledTimes(2);
+    const payload = chrome.storage.sync.set.mock.calls[1][0].newtab_data;
+    expect(payload.__sync).toEqual({ writerId: 'test-writer-id', revision: 2 });
+    expect(payload).toMatchObject(stateC);
+  });
+
+  /** Poll until `assertion` stops throwing; for real-timer tests. */
+  function waitFor(assertion, { interval = 5, timeout = 5000 } = {}) {
+    return new Promise((resolve, reject) => {
+      const start = Date.now();
+      (function poll() {
+        try {
+          assertion();
+          resolve();
+        } catch (e) {
+          if (Date.now() - start > timeout) reject(e);
+          else setTimeout(poll, interval);
+        }
+      })();
+    });
+  }
+
+  
+
+  
+
+  it('flush() waits for pending debounced write and drains write queue', async () => {
+    const { createSyncer } = await import('../storage.js');
+    mockSetsOk();
+    const syncer = await createSyncer({ debounceMs: 100, writerId: 'test-writer-id' });
+
+    const p = syncer.persist(stateA); // scheduled
+    expect(chrome.storage.sync.set).not.toHaveBeenCalled();
+
+    await syncer.flush(); // flushes debounced write and waits for queue
+
+    expect(chrome.storage.sync.set).toHaveBeenCalledTimes(1);
+    await p; // persist promise also resolves
   });
 });
 

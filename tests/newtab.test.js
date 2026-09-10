@@ -8,6 +8,23 @@ globalThis.document = {
   addEventListener: vi.fn(),
 };
 
+globalThis.chrome = {
+  storage: {
+    local: {
+      get: vi.fn((key, cb) => cb({})),
+      set: vi.fn((obj, cb) => cb && cb()),
+      remove: vi.fn((key, cb) => cb && cb()),
+    },
+    sync: {
+      get: vi.fn((key, cb) => cb({})),
+      set: vi.fn((obj, cb) => cb && cb()),
+    },
+    onChanged: {
+      addListener: vi.fn(),
+    },
+  },
+};
+
 const { moveItemInList } = await import('../newtab.js');
 
 // ---------------------------------------------------------------------------

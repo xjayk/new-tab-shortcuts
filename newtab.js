@@ -38,7 +38,7 @@ let $bgFileInput;
 // Sync orchestration — debounced writes + self-echo guard (see storage.js)
 // ---------------------------------------------------------------------------
 
-const syncer = createSyncer();
+const syncer = await createSyncer();
 
 // ---------------------------------------------------------------------------
 // Edit mode
@@ -814,7 +814,9 @@ function closeModal() {
 
 function persist() {
   render();
-  syncer.persist(state);
+  // Fire-and-forget: the UI must not wait on sync, but surface failures instead
+  // of leaking an unhandled rejection from the debounced write.
+  syncer.persist(state).catch(err => console.error('Failed to persist shortcuts:', err));
 }
 
 // ---------------------------------------------------------------------------
@@ -1093,8 +1095,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   );
 
-  onChange(syncState => {
-    if (!syncer.onRemote(syncState)) return;
+  onChange((syncState, meta) => {
+    if (!syncer.onRemote(syncState, meta)) return;
     state = syncState;
     render();
   });
