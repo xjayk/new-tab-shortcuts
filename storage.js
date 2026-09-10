@@ -183,20 +183,26 @@ function debounce(fn, ms) {
  */
 function createSyncer({ debounceMs = 400, historyLimit = 10 } = {}) {
   const history = new Set();
-  const debouncedSave = debounce(saveAll, debounceMs);
+  const rememberWrite = state => {
+    const key = JSON.stringify(state);
+    history.add(key);
+    if (history.size > historyLimit) {
+      const oldest = history.keys().next().value;
+      history.delete(oldest);
+    }
+  };
+  const debouncedSave = debounce(state => {
+    rememberWrite(state);
+    saveAll(state);
+  }, debounceMs);
 
   return {
     /**
-     * Record `state` and schedule a debounced write to both layers.
+     * Schedule a debounced write to both layers. The state is recorded only
+     * when that write begins, so superseded states are not mistaken for echoes.
      * @param {AppState} state
      */
     persist(state) {
-      const key = JSON.stringify(state);
-      history.add(key);
-      if (history.size > historyLimit) {
-        const oldest = history.keys().next().value;
-        history.delete(oldest);
-      }
       debouncedSave(state);
     },
     /**
