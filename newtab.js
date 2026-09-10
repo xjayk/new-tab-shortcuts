@@ -6,7 +6,9 @@
  * at boot — never re-attached on re-renders, so it can't accumulate.
  */
 
-import { init, saveAll, onChange, newId, validate, saveBackground, readBackground, clearBackground, saveBackgroundSize, readBackgroundSize } from './storage.js';
+import { init, onChange, newId, validate, createSyncer, saveBackground, readBackground, clearBackground, saveBackgroundSize, readBackgroundSize } from './storage.js';
+
+export { moveItemInList };
 
 // ---------------------------------------------------------------------------
 // State
@@ -33,32 +35,10 @@ let $bgSizeSelect;
 let $bgFileInput;
 
 // ---------------------------------------------------------------------------
-// Debounce utility
+// Sync orchestration — debounced writes + self-echo guard (see storage.js)
 // ---------------------------------------------------------------------------
 
-function debounce(fn, ms) {
-  let timer;
-  let lastArgs;
-  const debounced = (...args) => {
-    lastArgs = args;
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...lastArgs), ms);
-  };
-  debounced.cancel = () => { clearTimeout(timer); timer = null; };
-  debounced.flush = (...args) => {
-    clearTimeout(timer);
-    fn(...args);
-  };
-  return debounced;
-}
-
-const debouncedSave = debounce(saveAll, 400);
-
-// ---------------------------------------------------------------------------
-// Self-write guard — skip onChange echo from our own writes
-// ---------------------------------------------------------------------------
-
-const writtenStates = new Set();
+const syncer = createSyncer();
 
 // ---------------------------------------------------------------------------
 // Edit mode
@@ -99,6 +79,8 @@ const EDIT_ACTIONS = new Set([
   'rename-group',
   'tile-menu',
   'duplicate-shortcut',
+  'move-shortcut-left',
+  'move-shortcut-right',
 ]);
 
 // ---------------------------------------------------------------------------
@@ -173,12 +155,15 @@ function renderGroups(root) {
     }
   }
 
+  let nextTileIndex = 0;
   state.groups.forEach((group, index) => {
-    const newHtml = groupHTML(group);
+    const startIdx = nextTileIndex;
+    nextTileIndex += group.shortcuts.length;
+    const newHtml = groupHTML(group, startIdx);
     const existingChild = existingEls.get(group.id);
+    const groupStateStr = JSON.stringify(group) + String(editMode) + String(startIdx);
 
     if (existingChild) {
-      const groupStateStr = JSON.stringify(group) + String(editMode);
       if (existingChild._groupState !== groupStateStr) {
         const temp = document.createElement('div');
         temp.innerHTML = newHtml;
@@ -197,7 +182,7 @@ function renderGroups(root) {
       const temp = document.createElement('div');
       temp.innerHTML = newHtml;
       const newChild = temp.firstElementChild;
-      newChild._groupState = JSON.stringify(group) + String(editMode);
+      newChild._groupState = groupStateStr;
 
       const currentChildAtIndex = root.children[index];
       root.insertBefore(newChild, currentChildAtIndex || null);
@@ -206,9 +191,9 @@ function renderGroups(root) {
   });
 
   if (state.shortcuts.length > 0) {
-    const ungroupedHtml = ungroupedHTML();
+    const ungroupedHtml = ungroupedHTML(nextTileIndex);
     const existingUngrouped = existingEls.get(UNGROUPED_ID);
-    const ungroupedStateStr = JSON.stringify(state.shortcuts) + String(editMode);
+    const ungroupedStateStr = JSON.stringify(state.shortcuts) + String(editMode) + String(nextTileIndex);
     if (existingUngrouped) {
       if (existingUngrouped._groupState !== ungroupedStateStr) {
         const temp = document.createElement('div');
@@ -232,8 +217,8 @@ function renderGroups(root) {
   loadTileFavicons(root);
 }
 
-function groupHTML(group) {
-  const tiles = group.shortcuts.map(s => tileHTML(s, group.id)).join('');
+function groupHTML(group, startIdx) {
+  const tiles = group.shortcuts.map((s, i) => tileHTML(s, group.id, startIdx + i, i, group.shortcuts.length)).join('');
   const actions = editMode
     ? `<div class="group-actions">
         <button class="icon-btn" title="Add shortcut" data-action="add-shortcut" data-group-id="${group.id}">+</button>
@@ -258,8 +243,8 @@ function groupHTML(group) {
     </section>`;
 }
 
-function ungroupedHTML() {
-  const tiles = state.shortcuts.map(s => tileHTML(s, '')).join('');
+function ungroupedHTML(startIdx) {
+  const tiles = state.shortcuts.map((s, i) => tileHTML(s, '', startIdx + i, i, state.shortcuts.length)).join('');
   const addTile = editMode
     ? `<button class="tile tile-add" data-action="add-shortcut" title="Add shortcut">
         <span class="tile-add-icon">+</span>
@@ -347,15 +332,28 @@ function loadFaviconForEl(imgEl, pageUrl) {
   imgEl.src = faviconUrl.toString();
 }
 
-function tileHTML(shortcut, groupId) {
+function tileHTML(shortcut, groupId, index, sectionIndex, sectionLength) {
   const initial = (shortcut.name || shortcut.url).charAt(0).toUpperCase();
   const colorIndex = Math.abs(hashStr(shortcut.id)) % ACCENT_COLORS.length;
   const color = ACCENT_COLORS[colorIndex];
+  const badge = index >= 0 && index < 10
+    ? `<kbd class="tile-kbd">${index === 9 ? '0' : index + 1}</kbd>`
+    : '';
+  const showMoveControls = sectionLength > 1;
+  const canMoveLeft = sectionIndex > 0;
+  const canMoveRight = sectionIndex < sectionLength - 1;
+  const moveControls = showMoveControls
+    ? `<button class="tile-dropdown-item" data-action="move-shortcut-left"
+               data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"${canMoveLeft ? '' : ' disabled'}>Move left</button>
+       <button class="tile-dropdown-item" data-action="move-shortcut-right"
+               data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"${canMoveRight ? '' : ' disabled'}>Move right</button>`
+    : '';
   const menu = editMode
     ? `<span class="tile-menu">
         <button class="tile-menu-btn" data-action="tile-menu" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"
                 title="More" tabindex="-1">⋮</button>
         <div class="tile-dropdown">
+          ${moveControls}
           <button class="tile-dropdown-item" data-action="edit-shortcut"
                   data-shortcut-id="${shortcut.id}" data-group-id="${groupId}">Edit</button>
           <button class="tile-dropdown-item" data-action="duplicate-shortcut"
@@ -367,6 +365,7 @@ function tileHTML(shortcut, groupId) {
     : '';
   return `
     <a class="tile" href="${escAttr(shortcut.url)}" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"${editMode ? ' target="_blank" rel="noopener"' : ''}>
+      ${badge}
       <span class="tile-icon">
         <img class="tile-favicon" data-url="${escAttr(shortcut.url)}" data-favicon="pending" alt="">
         <span class="tile-fallback" style="background:${color}">${escHtml(initial)}</span>
@@ -420,6 +419,11 @@ function handleClick(e) {
     e.stopPropagation();
     closeAllTileMenus();
     duplicateShortcut(groupId, shortcutId);
+  } else if (action === 'move-shortcut-left' || action === 'move-shortcut-right') {
+    e.preventDefault();
+    e.stopPropagation();
+    closeAllTileMenus();
+    moveShortcut(groupId, shortcutId, action === 'move-shortcut-left' ? 'left' : 'right');
   } else if (action === 'edit-shortcut') {
     e.preventDefault();
     e.stopPropagation();
@@ -710,6 +714,49 @@ function duplicateShortcut(groupId, shortcutId) {
   persist();
 }
 
+/**
+ * Move the item at `index` one position in `direction` within a list.
+ * Returns a new array (immutable) or the original list when the move
+ * would exit bounds. Orders are encoded purely by array index, so this
+ * is the single primitive behind all reordering.
+ * @param {Array} list
+ * @param {number} index
+ * @param {'left'|'right'} direction
+ * @returns {Array}
+ */
+function moveItemInList(list, index, direction) {
+  const nextIndex = direction === 'left' ? index - 1 : index + 1;
+  if (index < 0 || index >= list.length || nextIndex < 0 || nextIndex >= list.length) return list;
+  const next = [...list];
+  const [item] = next.splice(index, 1);
+  next.splice(nextIndex, 0, item);
+  return next;
+}
+
+function moveShortcut(groupId, shortcutId, direction) {
+  const list = groupId
+    ? state.groups.find(g => g.id === groupId)?.shortcuts
+    : state.shortcuts;
+  if (!list) return;
+
+  const index = list.findIndex(s => s.id === shortcutId);
+  if (index === -1) return;
+  const next = moveItemInList(list, index, direction);
+  if (next === list) return;
+
+  if (groupId) {
+    state = {
+      ...state,
+      groups: state.groups.map(g =>
+        g.id === groupId ? { ...g, shortcuts: next } : g
+      ),
+    };
+  } else {
+    state = { ...state, shortcuts: next };
+  }
+  persist();
+}
+
 function toggleTileMenu(btn) {
   const tileMenu = btn.closest('.tile-menu');
   if (!tileMenu) return;
@@ -767,13 +814,7 @@ function closeModal() {
 
 function persist() {
   render();
-  const stateStr = JSON.stringify(state);
-  writtenStates.add(stateStr);
-  if (writtenStates.size > 10) {
-    const oldest = writtenStates.keys().next().value;
-    writtenStates.delete(oldest);
-  }
-  debouncedSave(state);
+  syncer.persist(state);
 }
 
 // ---------------------------------------------------------------------------
@@ -804,6 +845,44 @@ function hashStr(str) {
     h = Math.imul(31, h) + str.charCodeAt(i) | 0;
   }
   return h;
+}
+
+/**
+ * Map a keyboard event code to a shortcut tile index (1–9, 0 → indices 0–9).
+ * Uses e.code so the mapping is layout-independent and Shift doesn't break it.
+ * Returns null for any non-digit key.
+ * @param {string} code — event.code, e.g. "Digit1", "Digit0"
+ * @returns {number|null}
+ */
+function keyIndexForCode(code) {
+  const match = /^Digit([0-9])$/.exec(code);
+  if (!match) return null;
+  return match[1] === '0' ? 9 : Number(match[1]) - 1;
+}
+
+// ---------------------------------------------------------------------------
+// Keyboard navigation — activate shortcuts by tile index (1–9, 0)
+// ---------------------------------------------------------------------------
+
+function handleKeyNavigation(e) {
+  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  const tag = document.activeElement?.tagName;
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)
+      || document.activeElement?.closest('[contenteditable]')) return;
+
+  const idx = keyIndexForCode(e.code);
+  if (idx === null) return;
+
+  const tiles = document.querySelectorAll('.tile[href]');
+  const tile = tiles[idx];
+  if (!tile) return;
+
+  e.preventDefault();
+  if (e.shiftKey) {
+    window.open(tile.href, '_blank', 'noopener');
+  } else {
+    window.location.href = tile.href;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -991,6 +1070,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
+  // Speed-dial keyboard activation (1–9, 0). "/" is left native (address bar).
+  document.addEventListener('keydown', handleKeyNavigation);
+
   initToolbar();
   initEventDelegation();
   render();
@@ -1012,9 +1094,7 @@ document.addEventListener('DOMContentLoaded', () => {
   );
 
   onChange(syncState => {
-    const syncStateStr = JSON.stringify(syncState);
-    if (writtenStates.has(syncStateStr)) return;
-    debouncedSave.cancel();
+    if (!syncer.onRemote(syncState)) return;
     state = syncState;
     render();
   });

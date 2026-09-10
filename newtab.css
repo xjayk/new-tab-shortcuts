@@ -266,6 +266,31 @@
   outline-offset: 2px;
 }
 
+/* Keyboard shortcut badges (1–9, 0) — hidden via body.no-key-hints */
+.tile-kbd {
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  z-index: 10;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 3px;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: .6rem;
+  font-weight: 700;
+  line-height: 1;
+  font-family: inherit;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  pointer-events: none;
+  user-select: none;
+}
+body.no-key-hints .tile-kbd { display: none; }
+
 .tile-icon {
   width: 36px;
   height: 36px;
@@ -365,7 +390,9 @@
   white-space: nowrap;
   transition: background .1s;
 }
-.tile-dropdown-item:hover { background: var(--surface-2); }
+.tile-dropdown-item:not(:disabled):hover { background: var(--surface-2); }
+.tile-dropdown-item:disabled { color: var(--text-muted); opacity: .5; cursor: default; }
+.tile-dropdown-item:disabled:hover { background: transparent; }
 .tile-dropdown-item.danger { color: var(--danger); }
 .tile-dropdown-item.danger:hover { background: rgba(224,90,106,.12); }
 

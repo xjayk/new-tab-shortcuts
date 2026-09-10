@@ -42,7 +42,9 @@ This file provides context for any AI assistant (Cursor, GitHub Copilot, etc.) w
     url: string;      // always includes protocol
   }
   ```
-- `newtab.js` holds state in a module-scoped `let state` and calls `persist()` after every mutation, which calls `saveAll(state)` then re-renders.
+- `newtab.js` holds state in a module-scoped `let state` and calls `persist()` after every mutation, which records state and schedules a debounced `saveAll` via `createSyncer` (self-echo-guarded live sync), then re-renders.
+
+- `newtab.js` holds state in a module-scoped `let state` and calls `persist()` after every mutation, which re-renders and schedules a debounced `saveAll` via `createSyncer`. `createSyncer` records a state only when its write begins, preventing superseded local snapshots from being mistaken for self-echoes.
 
 ## Rendering Model
 - **Boot sequence**:
@@ -58,10 +60,10 @@ This file provides context for any AI assistant (Cursor, GitHub Copilot, etc.) w
 
 ## User Interactions
 - **Tile actions**: Shortcuts display favicons (loaded via Chrome's built-in `chrome://favicon` API — no external requests) with a fallback initial. Clicking a tile opens the URL directly. In edit mode, tiles open in a new tab (`target="_blank"`).
-- **Tile menu**: In edit mode, hovering a tile reveals a `⋮` button that opens a dropdown with Edit, Duplicate, and Delete options.
+- **Tile menu**: In edit mode, hovering a tile reveals a `⋮` button that opens a dropdown with Move left, Move right, Edit, Duplicate, and Delete options. Move actions reorder within the tile's own section (its group, or the ungrouped section) by array index; the first/last item's out-of-bounds move is disabled, and both are omitted for single-item sections.
 - **Group actions**: In edit mode, each group header has `+` (add shortcut) and `✕` (delete group) buttons. Group names are clickable to rename.
 - **Ungrouped shortcuts**: Shown in a dedicated section at the bottom when there are shortcuts not belonging to any group.
-- **Keyboard shortcuts**: `E` toggles edit mode on/off. `Escape` exits edit mode.
+- **Keyboard shortcuts**: `E` toggles edit mode on/off. `Escape` exits edit mode. Speed-dial keys `1`–`9`/`0` activate the first 10 shortcut tiles by flat order (`1` = first tile, `0` = tenth); `Shift` + key opens in a new tab; `/` is left native (address bar). Numeric shortcuts are ignored while an input is focused.
 - **Import/Export**: JSON export downloads current state; import reads a previously exported JSON file.
 
 ## File Structure
@@ -70,7 +72,7 @@ This file provides context for any AI assistant (Cursor, GitHub Copilot, etc.) w
 ├── newtab.html         ← Entry point. Inline critical CSS (tokens + skeleton). Deferred <script type="module">
 ├── newtab.css          ← Full stylesheet. Loaded non-blocking via <link>. Layout, buttons, tiles, modal, animations
 ├── newtab.js           ← UI logic. ES module. Imports from ./storage.js. State, render, event delegation, CRUD, modal
-├── storage.js          ← Dual-layer storage abstraction. Exports: init, saveAll, onChange, newId, validate
+├── storage.js          ← Dual-layer storage abstraction. Exports: init, saveAll, onChange, newId, validate, debounce, createSyncer
 ├── icons/              ← icon16.png, icon48.png, icon128.png
 ├── tests/
 │   ├── storage.test.js       ← Vitest unit tests for storage.js

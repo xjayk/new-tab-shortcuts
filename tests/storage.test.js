@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // ---------------------------------------------------------------------------
 // Chrome API mock — set up before any module import
@@ -425,6 +425,195 @@ describe('onChange', () => {
     listener({ newtab_data: { oldValue: { version: 1, groups: [], shortcuts: [] } } }, 'sync');
 
     expect(callback).not.toHaveBeenCalled();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// debounce
+// ---------------------------------------------------------------------------
+
+describe('debounce', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('fires the callback after the delay', async () => {
+    const { debounce } = await import('../storage.js');
+    const fn = vi.fn();
+    const debounced = debounce(fn, 100);
+
+    debounced('a');
+    expect(fn).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(99);
+    expect(fn).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(1);
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fn).toHaveBeenCalledWith('a');
+  });
+
+  it('coalesces multiple rapid calls into a single invocation', async () => {
+    const { debounce } = await import('../storage.js');
+    const fn = vi.fn();
+    const debounced = debounce(fn, 100);
+
+    debounced(1);
+    debounced(2);
+    debounced(3);
+    vi.advanceTimersByTime(100);
+
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fn).toHaveBeenCalledWith(3);
+  });
+
+  it('cancel prevents the callback from firing', async () => {
+    const { debounce } = await import('../storage.js');
+    const fn = vi.fn();
+    const debounced = debounce(fn, 100);
+
+    debounced();
+    debounced.cancel();
+    vi.advanceTimersByTime(200);
+
+    expect(fn).not.toHaveBeenCalled();
+  });
+
+  it('flush fires the callback immediately', async () => {
+    const { debounce } = await import('../storage.js');
+    const fn = vi.fn();
+    const debounced = debounce(fn, 100);
+
+    debounced('x');
+    debounced.flush('y');
+
+    expect(fn).toHaveBeenCalledTimes(1);
+    expect(fn).toHaveBeenCalledWith('y');
+
+    vi.advanceTimersByTime(200);
+    expect(fn).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// createSyncer — self-echo guard + debounced persist
+// ---------------------------------------------------------------------------
+
+describe('createSyncer', () => {
+  const stateA = { version: 1, groups: [{ id: 'g-a', name: 'A', shortcuts: [] }], shortcuts: [] };
+  const stateB = { version: 1, groups: [{ id: 'g-b', name: 'B', shortcuts: [] }], shortcuts: [] };
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('persist schedules a debounced saveAll to both layers', async () => {
+    const { createSyncer } = await import('../storage.js');
+    mockSetsOk();
+    const syncer = createSyncer({ debounceMs: 100 });
+
+    syncer.persist(stateA);
+    expect(chrome.storage.local.set).not.toHaveBeenCalled();
+    expect(chrome.storage.sync.set).not.toHaveBeenCalled();
+
+    vi.advanceTimersByTime(100);
+    expect(chrome.storage.local.set).toHaveBeenCalledTimes(1);
+    expect(chrome.storage.sync.set).toHaveBeenCalledTimes(1);
+  });
+
+  it('onRemote returns false for an echo of a persisted state', async () => {
+    const { createSyncer } = await import('../storage.js');
+    const syncer = createSyncer();
+
+    syncer.persist(stateA);
+    expect(syncer.onRemote(stateA)).toBe(false);
+  });
+
+  it('onRemote returns true for a remote state not in history', async () => {
+    const { createSyncer } = await import('../storage.js');
+    const syncer = createSyncer();
+
+    syncer.persist(stateA);
+    expect(syncer.onRemote(stateB)).toBe(true);
+  });
+
+  it('onRemote cancels the pending self-write when remote state wins', async () => {
+    const { createSyncer } = await import('../storage.js');
+    mockSetsOk();
+    const syncer = createSyncer({ debounceMs: 100 });
+
+    syncer.persist(stateA);
+    expect(syncer.onRemote(stateB)).toBe(true);
+
+    vi.advanceTimersByTime(200);
+    expect(chrome.storage.sync.set).not.toHaveBeenCalled();
+  });
+
+  it('history is bounded and evicts the oldest entry beyond the limit', async () => {
+    const { createSyncer } = await import('../storage.js');
+    const syncer = createSyncer({ historyLimit: 2 });
+    const states = Array.from({ length: 3 }, (_, i) => ({
+      version: 1,
+      groups: [{ id: `g-${i}`, name: `S${i}`, shortcuts: [] }],
+      shortcuts: [],
+    }));
+
+    syncer.persist(states[0]);
+    syncer.persist(states[1]);
+    syncer.persist(states[2]);
+
+    expect(syncer.onRemote(states[1])).toBe(false); // still in history
+    expect(syncer.onRemote(states[0])).toBe(true);  // oldest evicted → no longer suppressed
+  });
+
+  it('full round trip: suppresses the echo of our own write (no infinite loop)', async () => {
+    const { createSyncer, onChange } = await import('../storage.js');
+    mockSetsOk();
+    chrome.storage.local.set.mockImplementation((obj, cb) => cb && cb());
+
+    const syncer = createSyncer({ debounceMs: 100 });
+    let applied = null;
+    onChange(syncState => {
+      if (!syncer.onRemote(syncState)) return;
+      applied = syncState;
+    });
+
+    syncer.persist(stateA);
+    vi.advanceTimersByTime(100); // debounced saveAll fires → writes local + sync
+
+    const listener = chrome.storage.onChanged.addListener.mock.calls[0][0];
+    listener({ newtab_data: { newValue: stateA } }, 'sync'); // echo of our own write
+
+    expect(applied).toBeNull(); // self-echo must not be applied
+    expect(chrome.storage.sync.set).toHaveBeenCalledTimes(1); // no re-save → no loop
+  });
+
+  it('full round trip: applies a genuinely remote state from onChange', async () => {
+    const { createSyncer, onChange } = await import('../storage.js');
+    mockSetsOk();
+    chrome.storage.local.set.mockImplementation((obj, cb) => cb && cb());
+
+    const syncer = createSyncer({ debounceMs: 100 });
+    let applied = null;
+    onChange(syncState => {
+      if (!syncer.onRemote(syncState)) return;
+      applied = syncState;
+    });
+
+    syncer.persist(stateA);
+    vi.advanceTimersByTime(100);
+
+    const listener = chrome.storage.onChanged.addListener.mock.calls[0][0];
+    listener({ newtab_data: { newValue: stateB } }, 'sync');
+
+    expect(applied).toEqual(stateB);
+    expect(chrome.storage.sync.set).toHaveBeenCalledTimes(1); // no extra writes
   });
 });
 

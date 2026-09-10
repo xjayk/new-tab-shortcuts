@@ -150,6 +150,71 @@ function onChange(callback) {
   });
 }
 
+/**
+ * Debounce a function so it fires `ms` after the last call.
+ * @param {function(...any): void} fn
+ * @param {number} ms
+ */
+function debounce(fn, ms) {
+  let timer;
+  let lastArgs;
+  const debounced = (...args) => {
+    lastArgs = args;
+    clearTimeout(timer);
+    timer = setTimeout(() => fn(...lastArgs), ms);
+  };
+  debounced.cancel = () => { clearTimeout(timer); timer = null; };
+  debounced.flush = (...args) => {
+    clearTimeout(timer);
+    fn(...args);
+  };
+  return debounced;
+}
+
+/**
+ * Create a sync orchestrator that rate-limits writes to Chrome Sync
+ * and ignores chrome.storage.onChanged echoes of our own writes.
+ *
+ * Own writes are debounced (protects the ~100KB sync quota from rapid
+ * CRUD bursts), and the serialized state is recorded so a later sync
+ * echo of that same state can be suppressed instead of re-applied.
+ *
+ * @param {{ debounceMs?: number, historyLimit?: number }} [options]
+ */
+function createSyncer({ debounceMs = 400, historyLimit = 10 } = {}) {
+  const history = new Set();
+  const debouncedSave = debounce(saveAll, debounceMs);
+
+  return {
+    /**
+     * Record `state` and schedule a debounced write to both layers.
+     * @param {AppState} state
+     */
+    persist(state) {
+      const key = JSON.stringify(state);
+      history.add(key);
+      if (history.size > historyLimit) {
+        const oldest = history.keys().next().value;
+        history.delete(oldest);
+      }
+      debouncedSave(state);
+    },
+    /**
+     * Decide whether an incoming sync state should be applied.
+     * Returns false for echoes of our own writes (skip), otherwise
+     * cancels the pending self-write (remote wins) and returns true.
+     * @param {AppState} state
+     * @returns {boolean}
+     */
+    onRemote(state) {
+      const key = JSON.stringify(state);
+      if (history.has(key)) return false;
+      debouncedSave.cancel();
+      return true;
+    },
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Background image — stored in local-only to avoid sync quota limits
 // ---------------------------------------------------------------------------
@@ -215,4 +280,4 @@ async function readBackgroundSize() {
   });
 }
 
-export { init, saveAll, onChange, newId, validate, saveBackground, readBackground, clearBackground, saveBackgroundSize, readBackgroundSize };
+export { init, saveAll, onChange, newId, validate, debounce, createSyncer, saveBackground, readBackground, clearBackground, saveBackgroundSize, readBackgroundSize };
