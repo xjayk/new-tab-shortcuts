@@ -7,6 +7,7 @@
  */
 
 import { init, onChange, newId, validate, createSyncer, saveBackground, readBackground, clearBackground, saveBackgroundSize, readBackgroundSize } from './storage.js';
+import { moveItemInList } from './reorder.js';
 
 // ---------------------------------------------------------------------------
 // State
@@ -36,7 +37,8 @@ let $bgFileInput;
 // Sync orchestration — debounced writes + self-echo guard (see storage.js)
 // ---------------------------------------------------------------------------
 
-const syncer = createSyncer();
+let syncer = null;
+const syncerPromise = createSyncer().then(s => { syncer = s; return s; });
 
 // ---------------------------------------------------------------------------
 // Edit mode
@@ -54,12 +56,12 @@ let hasBackground = false;
  */
 function setEditMode(next) {
   editMode = next;
-  $importBtn.hidden    = !editMode;
-  $exportBtn.hidden    = !editMode;
-  $shortcutBtn.hidden  = !editMode;
-  $addGroupBtn.hidden  = !editMode;
-  $bgBtn.hidden        = !editMode;
-  $clearBgBtn.hidden   = !editMode || !hasBackground;
+  $importBtn.hidden = !editMode;
+  $exportBtn.hidden = !editMode;
+  $shortcutBtn.hidden = !editMode;
+  $addGroupBtn.hidden = !editMode;
+  $bgBtn.hidden = !editMode;
+  $clearBgBtn.hidden = !editMode || !hasBackground;
   $bgSizeSelect.hidden = !editMode || !hasBackground;
   closeAllTileMenus();
   render();
@@ -77,22 +79,25 @@ const EDIT_ACTIONS = new Set([
   'rename-group',
   'tile-menu',
   'duplicate-shortcut',
+  'move-shortcut-left',
+  'move-shortcut-right',
 ]);
 
-// ---------------------------------------------------------------------------
-// Render
-// ---------------------------------------------------------------------------
+let cachedTileHrefs = [];
 
 function render() {
   if (!syncReady) {
     renderSkeleton($app);
+    cachedTileHrefs = [];
     return;
   }
 
   if (state.groups.length === 0 && state.shortcuts.length === 0) {
     renderEmpty($app);
+    cachedTileHrefs = [];
   } else {
     renderGroups($app);
+    cachedTileHrefs = Array.from($app.querySelectorAll('.tile[href]'), a => a.href);
   }
 }
 
@@ -151,12 +156,15 @@ function renderGroups(root) {
     }
   }
 
+  let nextTileIndex = 0;
   state.groups.forEach((group, index) => {
-    const newHtml = groupHTML(group);
+    const startIdx = nextTileIndex;
+    nextTileIndex += group.shortcuts.length;
+    const newHtml = groupHTML(group, startIdx);
     const existingChild = existingEls.get(group.id);
+    const groupStateStr = JSON.stringify(group) + String(editMode) + String(startIdx);
 
     if (existingChild) {
-      const groupStateStr = JSON.stringify(group) + String(editMode);
       if (existingChild._groupState !== groupStateStr) {
         const temp = document.createElement('div');
         temp.innerHTML = newHtml;
@@ -175,7 +183,7 @@ function renderGroups(root) {
       const temp = document.createElement('div');
       temp.innerHTML = newHtml;
       const newChild = temp.firstElementChild;
-      newChild._groupState = JSON.stringify(group) + String(editMode);
+      newChild._groupState = groupStateStr;
 
       const currentChildAtIndex = root.children[index];
       root.insertBefore(newChild, currentChildAtIndex || null);
@@ -184,9 +192,9 @@ function renderGroups(root) {
   });
 
   if (state.shortcuts.length > 0) {
-    const ungroupedHtml = ungroupedHTML();
+    const ungroupedHtml = ungroupedHTML(nextTileIndex);
     const existingUngrouped = existingEls.get(UNGROUPED_ID);
-    const ungroupedStateStr = JSON.stringify(state.shortcuts) + String(editMode);
+    const ungroupedStateStr = JSON.stringify(state.shortcuts) + String(editMode) + String(nextTileIndex);
     if (existingUngrouped) {
       if (existingUngrouped._groupState !== ungroupedStateStr) {
         const temp = document.createElement('div');
@@ -210,8 +218,8 @@ function renderGroups(root) {
   loadTileFavicons(root);
 }
 
-function groupHTML(group) {
-  const tiles = group.shortcuts.map(s => tileHTML(s, group.id)).join('');
+function groupHTML(group, startIdx) {
+  const tiles = group.shortcuts.map((s, i) => tileHTML(s, group.id, startIdx + i, i, group.shortcuts.length)).join('');
   const actions = editMode
     ? `<div class="group-actions">
         <button class="icon-btn" title="Add shortcut" data-action="add-shortcut" data-group-id="${group.id}">+</button>
@@ -236,8 +244,8 @@ function groupHTML(group) {
     </section>`;
 }
 
-function ungroupedHTML() {
-  const tiles = state.shortcuts.map(s => tileHTML(s, '')).join('');
+function ungroupedHTML(startIdx) {
+  const tiles = state.shortcuts.map((s, i) => tileHTML(s, '', startIdx + i, i, state.shortcuts.length)).join('');
   const addTile = editMode
     ? `<button class="tile tile-add" data-action="add-shortcut" title="Add shortcut">
         <span class="tile-add-icon">+</span>
@@ -325,15 +333,28 @@ function loadFaviconForEl(imgEl, pageUrl) {
   imgEl.src = faviconUrl.toString();
 }
 
-function tileHTML(shortcut, groupId) {
+function tileHTML(shortcut, groupId, index, sectionIndex, sectionLength) {
   const initial = (shortcut.name || shortcut.url).charAt(0).toUpperCase();
   const colorIndex = Math.abs(hashStr(shortcut.id)) % ACCENT_COLORS.length;
   const color = ACCENT_COLORS[colorIndex];
+  const badge = index >= 0 && index < 10
+    ? `<kbd class="tile-kbd">${index === 9 ? '0' : index + 1}</kbd>`
+    : '';
+  const showMoveControls = sectionLength > 1;
+  const canMoveLeft = sectionIndex > 0;
+  const canMoveRight = sectionIndex < sectionLength - 1;
+  const moveControls = showMoveControls
+    ? `<button class="tile-dropdown-item" data-action="move-shortcut-left"
+               data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"${canMoveLeft ? '' : ' disabled'}>Move left</button>
+       <button class="tile-dropdown-item" data-action="move-shortcut-right"
+               data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"${canMoveRight ? '' : ' disabled'}>Move right</button>`
+    : '';
   const menu = editMode
     ? `<span class="tile-menu">
         <button class="tile-menu-btn" data-action="tile-menu" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"
                 title="More" tabindex="-1">⋮</button>
         <div class="tile-dropdown">
+          ${moveControls}
           <button class="tile-dropdown-item" data-action="edit-shortcut"
                   data-shortcut-id="${shortcut.id}" data-group-id="${groupId}">Edit</button>
           <button class="tile-dropdown-item" data-action="duplicate-shortcut"
@@ -345,6 +366,7 @@ function tileHTML(shortcut, groupId) {
     : '';
   return `
     <a class="tile" href="${escAttr(shortcut.url)}" data-shortcut-id="${shortcut.id}" data-group-id="${groupId}"${editMode ? ' target="_blank" rel="noopener"' : ''}>
+      ${badge}
       <span class="tile-icon">
         <img class="tile-favicon" data-url="${escAttr(shortcut.url)}" data-favicon="pending" alt="">
         <span class="tile-fallback" style="background:${color}">${escHtml(initial)}</span>
@@ -364,10 +386,10 @@ function initEventDelegation() {
 
 function handleClick(e) {
   const btn = e.target.closest('[data-action]');
-  if (!btn) return;
+  if (!btn || btn.disabled) return;
 
-  const action     = btn.dataset.action;
-  const groupId    = btn.dataset.groupId;
+  const action = btn.dataset.action;
+  const groupId = btn.dataset.groupId;
   const shortcutId = btn.dataset.shortcutId;
 
   if (EDIT_ACTIONS.has(action) && !editMode) return;
@@ -398,6 +420,11 @@ function handleClick(e) {
     e.stopPropagation();
     closeAllTileMenus();
     duplicateShortcut(groupId, shortcutId);
+  } else if (action === 'move-shortcut-left' || action === 'move-shortcut-right') {
+    e.preventDefault();
+    e.stopPropagation();
+    closeAllTileMenus();
+    moveShortcut(groupId, shortcutId, action === 'move-shortcut-left' ? 'left' : 'right');
   } else if (action === 'edit-shortcut') {
     e.preventDefault();
     e.stopPropagation();
@@ -511,7 +538,7 @@ function startRename(el, groupId) {
 
   input.addEventListener('blur', commit);
   input.addEventListener('keydown', e => {
-    if (e.key === 'Enter')  { e.preventDefault(); input.blur(); }
+    if (e.key === 'Enter') { e.preventDefault(); input.blur(); }
     if (e.key === 'Escape') { input.removeEventListener('blur', commit); render(); }
   });
 }
@@ -563,12 +590,12 @@ function openAddModal(groupId, shortcutId) {
   document.body.appendChild($modal);
 
   const nameInput = document.getElementById('sc-name');
-  const urlInput  = document.getElementById('sc-url');
-  const errEl     = document.getElementById('sc-error');
+  const urlInput = document.getElementById('sc-url');
+  const errEl = document.getElementById('sc-error');
 
   if (editing) {
     nameInput.value = existing.name;
-    urlInput.value  = existing.url;
+    urlInput.value = existing.url;
   }
 
   nameInput.focus();
@@ -579,7 +606,7 @@ function openAddModal(groupId, shortcutId) {
 
   [nameInput, urlInput].forEach(el => {
     el.addEventListener('keydown', e => {
-      if (e.key === 'Enter')  saveShortcut(groupId, nameInput, urlInput, errEl, shortcutId);
+      if (e.key === 'Enter') saveShortcut(groupId, nameInput, urlInput, errEl, shortcutId);
       if (e.key === 'Escape') closeModal();
     });
   });
@@ -688,6 +715,32 @@ function duplicateShortcut(groupId, shortcutId) {
   persist();
 }
 
+
+
+function moveShortcut(groupId, shortcutId, direction) {
+  const list = groupId
+    ? state.groups.find(g => g.id === groupId)?.shortcuts
+    : state.shortcuts;
+  if (!list) return;
+
+  const index = list.findIndex(s => s.id === shortcutId);
+  if (index === -1) return;
+  const next = moveItemInList(list, index, direction);
+  if (next === list) return;
+
+  if (groupId) {
+    state = {
+      ...state,
+      groups: state.groups.map(g =>
+        g.id === groupId ? { ...g, shortcuts: next } : g
+      ),
+    };
+  } else {
+    state = { ...state, shortcuts: next };
+  }
+  persist();
+}
+
 function toggleTileMenu(btn) {
   const tileMenu = btn.closest('.tile-menu');
   if (!tileMenu) return;
@@ -745,7 +798,11 @@ function closeModal() {
 
 function persist() {
   render();
-  syncer.persist(state);
+  // Fire-and-forget: the UI must not wait on sync, but surface failures instead
+  // of leaking an unhandled rejection from the debounced write.
+  (syncer ? Promise.resolve(syncer) : syncerPromise)
+    .then(s => s.persist(state))
+    .catch(err => console.error('Failed to persist shortcuts:', err));
 }
 
 // ---------------------------------------------------------------------------
@@ -776,6 +833,43 @@ function hashStr(str) {
     h = Math.imul(31, h) + str.charCodeAt(i) | 0;
   }
   return h;
+}
+
+/**
+ * Map a keyboard event code to a shortcut tile index (1–9, 0 → indices 0–9).
+ * Uses e.code so the mapping is layout-independent and Shift doesn't break it.
+ * Returns null for any non-digit key.
+ * @param {string} code — event.code, e.g. "Digit1", "Digit0"
+ * @returns {number|null}
+ */
+function keyIndexForCode(code) {
+  const match = /^Digit([0-9])$/.exec(code);
+  if (!match) return null;
+  return match[1] === '0' ? 9 : Number(match[1]) - 1;
+}
+
+// ---------------------------------------------------------------------------
+// Keyboard navigation — activate shortcuts by tile index (1–9, 0)
+// ---------------------------------------------------------------------------
+
+function handleKeyNavigation(e) {
+  if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
+  const tag = document.activeElement?.tagName;
+  if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)
+    || document.activeElement?.closest('[contenteditable]')) return;
+
+  const idx = keyIndexForCode(e.code);
+  if (idx === null) return;
+
+  const href = cachedTileHrefs[idx];
+  if (!href) return;
+
+  e.preventDefault();
+  if (e.shiftKey) {
+    window.open(href, '_blank', 'noopener');
+  } else {
+    window.location.href = href;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -860,7 +954,7 @@ function setBackgroundImage(dataUrl) {
   document.body.style.backgroundPosition = 'center';
   document.body.style.backgroundRepeat = 'no-repeat';
   document.body.style.backgroundAttachment = 'fixed';
-  $clearBgBtn.hidden  = !editMode;
+  $clearBgBtn.hidden = !editMode;
   $bgSizeSelect.hidden = !editMode;
   if (!document.querySelector('.bg-overlay')) {
     const overlay = document.createElement('div');
@@ -880,7 +974,7 @@ function clearBg() {
   document.body.style.backgroundPosition = '';
   document.body.style.backgroundRepeat = '';
   document.body.style.backgroundAttachment = '';
-  $clearBgBtn.hidden   = true;
+  $clearBgBtn.hidden = true;
   $bgSizeSelect.hidden = true;
   clearBackground();
   const overlay = document.querySelector('.bg-overlay');
@@ -922,27 +1016,28 @@ function handleBgSizeChange() {
 }
 
 // ---------------------------------------------------------------------------
-// Boot
-// ---------------------------------------------------------------------------
+let booted = false;
 
-document.addEventListener('DOMContentLoaded', () => {
-  $app          = document.getElementById('app');
-  $addGroupBtn  = document.getElementById('add-group-btn');
-  $shortcutBtn  = document.getElementById('add-shortcut-btn');
-  $importBtn    = document.getElementById('import-btn');
-  $exportBtn    = document.getElementById('export-btn');
+function boot() {
+  if (booted) return;
+  booted = true;
+  $app = document.getElementById('app');
+  $addGroupBtn = document.getElementById('add-group-btn');
+  $shortcutBtn = document.getElementById('add-shortcut-btn');
+  $importBtn = document.getElementById('import-btn');
+  $exportBtn = document.getElementById('export-btn');
   $editCheckbox = document.getElementById('edit-checkbox');
-  $bgBtn        = document.getElementById('bg-btn');
-  $clearBgBtn   = document.getElementById('clear-bg-btn');
+  $bgBtn = document.getElementById('bg-btn');
+  $clearBgBtn = document.getElementById('clear-bg-btn');
   $bgSizeSelect = document.getElementById('bg-size');
 
   // Ensure all edit-only controls start hidden (belt + suspenders with HTML hidden attr)
-  $addGroupBtn.hidden  = true;
-  $shortcutBtn.hidden  = true;
-  $importBtn.hidden    = true;
-  $exportBtn.hidden    = true;
-  $bgBtn.hidden        = true;
-  $clearBgBtn.hidden   = true;
+  $addGroupBtn.hidden = true;
+  $shortcutBtn.hidden = true;
+  $importBtn.hidden = true;
+  $exportBtn.hidden = true;
+  $bgBtn.hidden = true;
+  $clearBgBtn.hidden = true;
   $bgSizeSelect.hidden = true;
   $editCheckbox.checked = false;
 
@@ -950,7 +1045,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if ((e.key === 'e' || e.key === 'E') && !e.metaKey && !e.ctrlKey && !e.altKey) {
       const tag = document.activeElement?.tagName;
       if (!['INPUT', 'TEXTAREA', 'A', 'BUTTON', 'SELECT'].includes(tag)
-          && !document.activeElement?.closest('[contenteditable]')) {
+        && !document.activeElement?.closest('[contenteditable]')) {
         // Programmatically toggle checkbox then dispatch change so the single handler fires
         $editCheckbox.checked = !$editCheckbox.checked;
         $editCheckbox.dispatchEvent(new Event('change'));
@@ -962,6 +1057,9 @@ document.addEventListener('DOMContentLoaded', () => {
       $editCheckbox.dispatchEvent(new Event('change'));
     }
   });
+
+  // Speed-dial keyboard activation (1–9, 0). "/" is left native (address bar).
+  document.addEventListener('keydown', handleKeyNavigation);
 
   initToolbar();
   initEventDelegation();
@@ -983,8 +1081,9 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   );
 
-  onChange(syncState => {
-    if (!syncer.onRemote(syncState)) return;
+  onChange(async (syncState, meta) => {
+    const s = syncer || await syncerPromise;
+    if (!s.onRemote(syncState, meta)) return;
     state = syncState;
     render();
   });
@@ -999,4 +1098,10 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
   });
-});
+}
+
+if (typeof document !== 'undefined' && document.readyState && document.readyState !== 'loading') {
+  boot();
+} else if (typeof document !== 'undefined' && document.addEventListener) {
+  document.addEventListener('DOMContentLoaded', boot);
+}

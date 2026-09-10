@@ -58,10 +58,10 @@ This file provides context for any AI assistant (Cursor, GitHub Copilot, etc.) w
 
 ## User Interactions
 - **Tile actions**: Shortcuts display favicons (loaded via Chrome's built-in `chrome://favicon` API — no external requests) with a fallback initial. Clicking a tile opens the URL directly. In edit mode, tiles open in a new tab (`target="_blank"`).
-- **Tile menu**: In edit mode, hovering a tile reveals a `⋮` button that opens a dropdown with Edit, Duplicate, and Delete options.
+- **Tile menu**: In edit mode, hovering a tile reveals a `⋮` button that opens a dropdown with Move left, Move right, Edit, Duplicate, and Delete options. Move actions reorder within the tile's own section (its group, or the ungrouped section) by array index; the first/last item's out-of-bounds move is disabled, and both are omitted for single-item sections.
 - **Group actions**: In edit mode, each group header has `+` (add shortcut) and `✕` (delete group) buttons. Group names are clickable to rename.
 - **Ungrouped shortcuts**: Shown in a dedicated section at the bottom when there are shortcuts not belonging to any group.
-- **Keyboard shortcuts**: `E` toggles edit mode on/off. `Escape` exits edit mode.
+- **Keyboard shortcuts**: `E` toggles edit mode on/off. `Escape` exits edit mode. Speed-dial keys `1`–`9`/`0` activate the first 10 shortcut tiles by flat order (`1` = first tile, `0` = tenth); `Shift` + key opens in a new tab; `/` is left native (address bar). Numeric shortcuts are ignored while an input is focused.
 - **Import/Export**: JSON export downloads current state; import reads a previously exported JSON file.
 
 ## File Structure

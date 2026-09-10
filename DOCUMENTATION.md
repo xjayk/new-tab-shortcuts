@@ -36,6 +36,7 @@ That's it. No build step required.
 | Delete a group | Enable edit mode → click **✕** next to the group name |
 | Add a shortcut | Enable edit mode → click **+** next to a group header, or the dashed **+** tile |
 | Edit a shortcut | Enable edit mode → hover a tile → click **⋮** → **Edit** |
+| Reorder shortcuts | Enable edit mode → hover a tile → click **⋮** → **Move left** / **Move right** (reorders within the tile's group or the ungrouped section) |
 | Duplicate a shortcut | Enable edit mode → hover a tile → click **⋮** → **Duplicate** |
 | Delete a shortcut | Enable edit mode → hover a tile → click **⋮** → **Delete** |
 | Import shortcuts | Enable edit mode → click **import** |
