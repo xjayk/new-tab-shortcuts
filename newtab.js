@@ -865,7 +865,7 @@ function keyIndexForCode(code) {
 // ---------------------------------------------------------------------------
 
 function handleKeyNavigation(e) {
-  if (e.metaKey || e.ctrlKey || e.altKey) return;
+  if (e.repeat || e.metaKey || e.ctrlKey || e.altKey) return;
   const tag = document.activeElement?.tagName;
   if (['INPUT', 'TEXTAREA', 'SELECT'].includes(tag)
       || document.activeElement?.closest('[contenteditable]')) return;
