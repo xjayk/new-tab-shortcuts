@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "groups": [
+    {
+      "name": "AI",
+      "shortcuts": [
+        { "name": "Perplexity", "url": "https://www.perplexity.ai" },
+        { "name": "DeepSeek", "url": "https://chat.deepseek.com" },
+        { "name": "ChatGPT", "url": "https://chatgpt.com" },
+        { "name": "Claude", "url": "https://claude.ai" },
+        { "name": "Gemini", "url": "https://gemini.google.com" },
+        { "name": "Cloudflare", "url": "https://dash.cloudflare.com" },
+        { "name": "Replit", "url": "https://replit.com" },
+        { "name": "Jules", "url": "https://jules.google.com/session" }
+      ]
+    },
+    {
+      "name": "TOOLS",
+      "shortcuts": [
+        { "name": "Github", "url": "https://github.com" },
+        { "name": "Github", "url": "https://github.com" }
+      ]
+    },
+    {
+      "name": "OTHER",
+      "shortcuts": [
+        { "name": "Infiscal - Key Management", "url": "https://app.infisical.com" },
+        { "name": "Enhancv", "url": "https://enhancv.com" }
+      ]
+    }
+  ]
+}

@@ -6,7 +6,7 @@
  * at boot — never re-attached on re-renders, so it can't accumulate.
  */
 
-import { init, saveAll, onChange, newId, validate, saveBackground, readBackground, clearBackground, saveBackgroundSize, readBackgroundSize } from './storage.js';
+import { init, onChange, newId, validate, createSyncer, saveBackground, readBackground, clearBackground, saveBackgroundSize, readBackgroundSize } from './storage.js';
 
 // ---------------------------------------------------------------------------
 // State
@@ -33,32 +33,10 @@ let $bgSizeSelect;
 let $bgFileInput;
 
 // ---------------------------------------------------------------------------
-// Debounce utility
+// Sync orchestration — debounced writes + self-echo guard (see storage.js)
 // ---------------------------------------------------------------------------
 
-function debounce(fn, ms) {
-  let timer;
-  let lastArgs;
-  const debounced = (...args) => {
-    lastArgs = args;
-    clearTimeout(timer);
-    timer = setTimeout(() => fn(...lastArgs), ms);
-  };
-  debounced.cancel = () => { clearTimeout(timer); timer = null; };
-  debounced.flush = (...args) => {
-    clearTimeout(timer);
-    fn(...args);
-  };
-  return debounced;
-}
-
-const debouncedSave = debounce(saveAll, 400);
-
-// ---------------------------------------------------------------------------
-// Self-write guard — skip onChange echo from our own writes
-// ---------------------------------------------------------------------------
-
-const writtenStates = new Set();
+const syncer = createSyncer();
 
 // ---------------------------------------------------------------------------
 // Edit mode
@@ -767,13 +745,7 @@ function closeModal() {
 
 function persist() {
   render();
-  const stateStr = JSON.stringify(state);
-  writtenStates.add(stateStr);
-  if (writtenStates.size > 10) {
-    const oldest = writtenStates.keys().next().value;
-    writtenStates.delete(oldest);
-  }
-  debouncedSave(state);
+  syncer.persist(state);
 }
 
 // ---------------------------------------------------------------------------
@@ -1012,9 +984,7 @@ document.addEventListener('DOMContentLoaded', () => {
   );
 
   onChange(syncState => {
-    const syncStateStr = JSON.stringify(syncState);
-    if (writtenStates.has(syncStateStr)) return;
-    debouncedSave.cancel();
+    if (!syncer.onRemote(syncState)) return;
     state = syncState;
     render();
   });

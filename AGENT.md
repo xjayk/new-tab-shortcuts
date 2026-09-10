@@ -42,7 +42,7 @@ This file provides context for any AI assistant (Cursor, GitHub Copilot, etc.) w
     url: string;      // always includes protocol
   }
   ```
-- `newtab.js` holds state in a module-scoped `let state` and calls `persist()` after every mutation, which calls `saveAll(state)` then re-renders.
+- `newtab.js` holds state in a module-scoped `let state` and calls `persist()` after every mutation, which re-renders and schedules a debounced `saveAll` via `createSyncer`. `createSyncer` records a state only when its write begins, preventing superseded local snapshots from being mistaken for self-echoes.
 
 ## Rendering Model
 - **Boot sequence**:
@@ -70,7 +70,7 @@ This file provides context for any AI assistant (Cursor, GitHub Copilot, etc.) w
 ├── newtab.html         ← Entry point. Inline critical CSS (tokens + skeleton). Deferred <script type="module">
 ├── newtab.css          ← Full stylesheet. Loaded non-blocking via <link>. Layout, buttons, tiles, modal, animations
 ├── newtab.js           ← UI logic. ES module. Imports from ./storage.js. State, render, event delegation, CRUD, modal
-├── storage.js          ← Dual-layer storage abstraction. Exports: init, saveAll, onChange, newId, validate
+├── storage.js          ← Dual-layer storage abstraction. Exports: init, saveAll, onChange, newId, validate, debounce, createSyncer
 ├── icons/              ← icon16.png, icon48.png, icon128.png
 ├── tests/
 │   ├── storage.test.js       ← Vitest unit tests for storage.js
