@@ -278,6 +278,14 @@ test.describe('Reordering shortcuts', () => {
     await expect(page.locator('.tile-name')).toHaveText(expectedNames);
   }
 
+  async function expectPersistedFlatOrder(page, expectedNames) {
+    await expect.poll(() => page.evaluate(async () => {
+      const data = (await chrome.storage.sync.get({ newtab_data: null })).newtab_data;
+      if (!data) return [];
+      return data.groups.flatMap(g => g.shortcuts).concat(data.shortcuts ?? []).map(s => s.name);
+    }), { timeout: 10_000 }).toEqual(expectedNames);
+  }
+
   test('move controls only appear in edit mode', async ({ context }) => {
     const page = await openNewtab(context);
     await seed(page, groupState(['Alpha', 'Bravo']));
@@ -297,6 +305,7 @@ test.describe('Reordering shortcuts', () => {
 
     await clickMove(page, 'gs-1', 'move-shortcut-left');
     await expectTileOrder(page, ['Bravo', 'Alpha', 'Charlie']);
+    await expectPersistedFlatOrder(page, ['Bravo', 'Alpha', 'Charlie']);
 
     // Persisted order survives a fresh load
     await page.reload();
@@ -319,6 +328,7 @@ test.describe('Reordering shortcuts', () => {
 
     await clickMove(page, 'u-1', 'move-shortcut-left'); // 'Duo' → left
     await expectTileOrder(page, ['Alpha', 'Bravo', 'Duo', 'Solo', 'Trio']);
+    await expectPersistedFlatOrder(page, ['Alpha', 'Bravo', 'Duo', 'Solo', 'Trio']);
 
     await page.reload();
     await expectTileOrder(page, ['Alpha', 'Bravo', 'Duo', 'Solo', 'Trio']);
@@ -359,6 +369,7 @@ test.describe('Reordering shortcuts', () => {
 
     await expectTileOrder(page, ['Bravo', 'Charlie', 'Delta', 'Alpha']);
     await expect(page.locator('.tile[href]')).toHaveCount(4);
+    await expectPersistedFlatOrder(page, ['Bravo', 'Charlie', 'Delta', 'Alpha']);
 
     await page.reload();
     await expectTileOrder(page, ['Bravo', 'Charlie', 'Delta', 'Alpha']);
