@@ -42,7 +42,7 @@ This file provides context for any AI assistant (Cursor, GitHub Copilot, etc.) w
     url: string;      // always includes protocol
   }
   ```
-- `newtab.js` holds state in a module-scoped `let state` and calls `persist()` after every mutation, which records state and schedules a debounced `saveAll` via `createSyncer` (self-echo-guarded live sync), then re-renders.
+- `newtab.js` holds state in a module-scoped `let state` and calls `persist()` after every mutation, which re-renders and schedules a debounced `saveAll` via `createSyncer`. `createSyncer` records a state only when its write begins, preventing superseded local snapshots from being mistaken for self-echoes.
 
 ## Rendering Model
 - **Boot sequence**:
