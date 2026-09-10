@@ -126,8 +126,14 @@ async function saveAll(state, provenance = null) {
     : localPayload;
 
   await Promise.all([
-    new Promise((resolve, reject) => chrome.storage.local.set(localPayload, err => err ? reject(err) : resolve())),
-    new Promise((resolve, reject) => chrome.storage.sync.set(syncPayload, err => err ? reject(err) : resolve())),
+    new Promise((resolve, reject) => chrome.storage.local.set(localPayload, () => {
+      const err = chrome.runtime?.lastError;
+      err ? reject(err) : resolve();
+    })),
+    new Promise((resolve, reject) => chrome.storage.sync.set(syncPayload, () => {
+      const err = chrome.runtime?.lastError;
+      err ? reject(err) : resolve();
+    })),
   ]);
   return validated;
 }
@@ -199,7 +205,10 @@ function debounce(fn, ms) {
 
   const debounced = (...args) => {
     lastArgs = args;
-    if (timer) clearTimeout(timer);
+    if (timer) {
+      clearTimeout(timer);
+      pendingResolve?.();
+    }
 
     // Create a new promise for this debounced call
     pendingPromise = new Promise((resolve, reject) => {
@@ -376,10 +385,10 @@ async function createSyncer({ debounceMs = 400, historyLimit = 10, writerId } = 
 
         // Sync stores the envelope { __sync } so echoes can be attributed to us.
         acknowledgedRevisions.add(revision);
-        // Prune old acknowledged revisions
+        // Prune old acknowledged revisions (evict oldest inserted)
         if (acknowledgedRevisions.size > historyLimit) {
-          const minRev = Math.min(...acknowledgedRevisions);
-          acknowledgedRevisions.delete(minRev);
+          const oldest = acknowledgedRevisions.values().next().value;
+          acknowledgedRevisions.delete(oldest);
         }
 
         try {

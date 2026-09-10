@@ -1,31 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-
-// newtab.js only touches the DOM at boot (inside DOMContentLoaded), so a
-// minimal document stub (set before import, like the chrome stub in
-// storage.test.js) lets us unit-test its pure exports in Node without
-// mounting a browser or the extension runtime.
-globalThis.document = {
-  addEventListener: vi.fn(),
-};
-
-globalThis.chrome = {
-  storage: {
-    local: {
-      get: vi.fn((key, cb) => cb({})),
-      set: vi.fn((obj, cb) => cb && cb()),
-      remove: vi.fn((key, cb) => cb && cb()),
-    },
-    sync: {
-      get: vi.fn((key, cb) => cb({})),
-      set: vi.fn((obj, cb) => cb && cb()),
-    },
-    onChanged: {
-      addListener: vi.fn(),
-    },
-  },
-};
-
-const { moveItemInList } = await import('../newtab.js');
+import { describe, it, expect } from 'vitest';
+import { moveItemInList } from '../reorder.js';
 
 // ---------------------------------------------------------------------------
 // moveItemInList — the single primitive behind shortcut reordering

@@ -7,8 +7,7 @@
  */
 
 import { init, onChange, newId, validate, createSyncer, saveBackground, readBackground, clearBackground, saveBackgroundSize, readBackgroundSize } from './storage.js';
-
-export { moveItemInList };
+import { moveItemInList } from './reorder.js';
 
 // ---------------------------------------------------------------------------
 // State
@@ -84,20 +83,21 @@ const EDIT_ACTIONS = new Set([
   'move-shortcut-right',
 ]);
 
-// ---------------------------------------------------------------------------
-// Render
-// ---------------------------------------------------------------------------
+let cachedTileHrefs = [];
 
 function render() {
   if (!syncReady) {
     renderSkeleton($app);
+    cachedTileHrefs = [];
     return;
   }
 
   if (state.groups.length === 0 && state.shortcuts.length === 0) {
     renderEmpty($app);
+    cachedTileHrefs = [];
   } else {
     renderGroups($app);
+    cachedTileHrefs = Array.from($app.querySelectorAll('.tile[href]'), a => a.href);
   }
 }
 
@@ -386,7 +386,7 @@ function initEventDelegation() {
 
 function handleClick(e) {
   const btn = e.target.closest('[data-action]');
-  if (!btn) return;
+  if (!btn || btn.disabled) return;
 
   const action = btn.dataset.action;
   const groupId = btn.dataset.groupId;
@@ -715,24 +715,7 @@ function duplicateShortcut(groupId, shortcutId) {
   persist();
 }
 
-/**
- * Move the item at `index` one position in `direction` within a list.
- * Returns a new array (immutable) or the original list when the move
- * would exit bounds. Orders are encoded purely by array index, so this
- * is the single primitive behind all reordering.
- * @param {Array} list
- * @param {number} index
- * @param {'left'|'right'} direction
- * @returns {Array}
- */
-function moveItemInList(list, index, direction) {
-  const nextIndex = direction === 'left' ? index - 1 : index + 1;
-  if (index < 0 || index >= list.length || nextIndex < 0 || nextIndex >= list.length) return list;
-  const next = [...list];
-  const [item] = next.splice(index, 1);
-  next.splice(nextIndex, 0, item);
-  return next;
-}
+
 
 function moveShortcut(groupId, shortcutId, direction) {
   const list = groupId
@@ -878,15 +861,14 @@ function handleKeyNavigation(e) {
   const idx = keyIndexForCode(e.code);
   if (idx === null) return;
 
-  const tiles = document.querySelectorAll('.tile[href]');
-  const tile = tiles[idx];
-  if (!tile) return;
+  const href = cachedTileHrefs[idx];
+  if (!href) return;
 
   e.preventDefault();
   if (e.shiftKey) {
-    window.open(tile.href, '_blank', 'noopener');
+    window.open(href, '_blank', 'noopener');
   } else {
-    window.location.href = tile.href;
+    window.location.href = href;
   }
 }
 
@@ -1034,10 +1016,11 @@ function handleBgSizeChange() {
 }
 
 // ---------------------------------------------------------------------------
-// Boot
-// ---------------------------------------------------------------------------
+let booted = false;
 
 function boot() {
+  if (booted) return;
+  booted = true;
   $app = document.getElementById('app');
   $addGroupBtn = document.getElementById('add-group-btn');
   $shortcutBtn = document.getElementById('add-shortcut-btn');
