@@ -38,7 +38,8 @@ let $bgFileInput;
 // Sync orchestration — debounced writes + self-echo guard (see storage.js)
 // ---------------------------------------------------------------------------
 
-const syncer = await createSyncer();
+let syncer = null;
+const syncerPromise = createSyncer().then(s => { syncer = s; return s; });
 
 // ---------------------------------------------------------------------------
 // Edit mode
