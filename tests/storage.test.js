@@ -529,9 +529,11 @@ describe('createSyncer', () => {
 
   it('onRemote returns false for an echo of a persisted state', async () => {
     const { createSyncer } = await import('../storage.js');
-    const syncer = createSyncer();
+    mockSetsOk();
+    const syncer = createSyncer({ debounceMs: 100 });
 
     syncer.persist(stateA);
+    vi.advanceTimersByTime(100);
     expect(syncer.onRemote(stateA)).toBe(false);
   });
 
@@ -555,9 +557,24 @@ describe('createSyncer', () => {
     expect(chrome.storage.sync.set).not.toHaveBeenCalled();
   });
 
+  it('applies a remote state that was superseded before its local write ran', async () => {
+    const { createSyncer } = await import('../storage.js');
+    mockSetsOk();
+    const syncer = createSyncer({ debounceMs: 100 });
+
+    syncer.persist(stateA);
+    syncer.persist(stateB); // stateA is never written because the save is debounced
+
+    expect(syncer.onRemote(stateA)).toBe(true);
+
+    vi.advanceTimersByTime(200);
+    expect(chrome.storage.sync.set).not.toHaveBeenCalled();
+  });
+  
   it('history is bounded and evicts the oldest entry beyond the limit', async () => {
     const { createSyncer } = await import('../storage.js');
-    const syncer = createSyncer({ historyLimit: 2 });
+    mockSetsOk();
+    const syncer = createSyncer({ debounceMs: 100, historyLimit: 2 });
     const states = Array.from({ length: 3 }, (_, i) => ({
       version: 1,
       groups: [{ id: `g-${i}`, name: `S${i}`, shortcuts: [] }],
@@ -565,8 +582,11 @@ describe('createSyncer', () => {
     }));
 
     syncer.persist(states[0]);
+    vi.advanceTimersByTime(100);
     syncer.persist(states[1]);
+    vi.advanceTimersByTime(100);
     syncer.persist(states[2]);
+    vi.advanceTimersByTime(100);
 
     expect(syncer.onRemote(states[1])).toBe(false); // still in history
     expect(syncer.onRemote(states[0])).toBe(true);  // oldest evicted → no longer suppressed
